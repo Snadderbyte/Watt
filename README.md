@@ -1,8 +1,3 @@
----
-title: Watt
-versions: 
-    .NET: net10.0
----
 # ⚡ Watt ⚡
 
 `Watt(Power) = Ampere(Current) * Voltage(Potential)`

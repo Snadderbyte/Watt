@@ -1,0 +1,297 @@
+using System;
+using System.Threading.Tasks;
+using Terminal.Gui;
+using Watt.Core.Authentication;
+
+namespace Watt.UI;
+
+/// <summary>
+/// Dialog for authenticating with a Dataverse environment.
+/// </summary>
+public class AuthenticationDialog : Dialog
+{
+    private readonly AuthenticationService _authService;
+    private readonly DataverseConnectionManager _connectionManager;
+    private readonly EnvironmentDetails _environment;
+    private Label? _statusLabel;
+
+    public AuthenticationDialog(
+        AuthenticationService authService,
+        DataverseConnectionManager connectionManager,
+        EnvironmentDetails environment)
+    {
+        _authService = authService;
+        _connectionManager = connectionManager;
+        _environment = environment;
+
+        InitializeUI();
+    }
+
+    private void InitializeUI()
+    {
+        Title = $"Authenticate - {_environment.Name}";
+        Width = 70;
+        Height = 15;
+
+        _statusLabel = new Label("Preparing to authenticate...")
+        {
+            X = 1,
+            Y = 1,
+            Width = Dim.Fill(1)
+        };
+        Add(_statusLabel);
+
+        Action authMethod = _environment.AuthMethod switch
+        {
+            AuthenticationMethod.OAuth => CreateOAuthUI,
+            AuthenticationMethod.ClientSecret => CreateClientSecretUI,
+            AuthenticationMethod.UsernamePassword => CreateUsernamePasswordUI,
+            _ => () => { _statusLabel.Text = "Unsupported authentication method"; }
+        };
+
+        authMethod();
+    }
+
+    private void CreateOAuthUI()
+    {
+        var instructions = new Label("Click 'Authenticate' to sign in with your account.")
+        {
+            X = 1,
+            Y = Pos.Bottom(_statusLabel!) + 1,
+            Width = Dim.Fill(1)
+        };
+        Add(instructions);
+
+        var authenticateButton = new Button("Authenticate")
+        {
+            X = 1,
+            Y = Pos.Bottom(instructions) + 1
+        };
+        authenticateButton.Clicked += async () => await AuthenticateWithOAuth();
+        Add(authenticateButton);
+
+        var cancelButton = new Button("Cancel")
+        {
+            X = Pos.Right(authenticateButton) + 2,
+            Y = Pos.Top(authenticateButton)
+        };
+        cancelButton.Clicked += () => RequestStop();
+        Add(cancelButton);
+    }
+
+    private void CreateClientSecretUI()
+    {
+        var tenantLabel = new Label("Tenant ID:")
+        {
+            X = 1,
+            Y = Pos.Bottom(_statusLabel!) + 1
+        };
+        Add(tenantLabel);
+
+        var tenantField = new TextField("")
+        {
+            X = Pos.Right(tenantLabel) + 1,
+            Y = Pos.Top(tenantLabel),
+            Width = 50
+        };
+        Add(tenantField);
+
+        var clientIdLabel = new Label("Client ID:")
+        {
+            X = 1,
+            Y = Pos.Bottom(tenantField) + 1
+        };
+        Add(clientIdLabel);
+
+        var clientIdField = new TextField("")
+        {
+            X = Pos.Right(clientIdLabel) + 1,
+            Y = Pos.Top(clientIdLabel),
+            Width = 50
+        };
+        Add(clientIdField);
+
+        var secretLabel = new Label("Client Secret:")
+        {
+            X = 1,
+            Y = Pos.Bottom(clientIdField) + 1
+        };
+        Add(secretLabel);
+
+        var secretField = new TextField("")
+        {
+            X = Pos.Right(secretLabel) + 1,
+            Y = Pos.Top(secretLabel),
+            Width = 50,
+            Secret = true
+        };
+        Add(secretField);
+
+        var authenticateButton = new Button("Authenticate")
+        {
+            X = 1,
+            Y = Pos.Bottom(secretField) + 1
+        };
+        authenticateButton.Clicked += async () => await AuthenticateWithClientSecret(
+            tenantField.Text.ToString()!,
+            clientIdField.Text.ToString()!,
+            secretField.Text.ToString()!);
+        Add(authenticateButton);
+
+        var cancelButton = new Button("Cancel")
+        {
+            X = Pos.Right(authenticateButton) + 2,
+            Y = Pos.Top(authenticateButton)
+        };
+        cancelButton.Clicked += () => RequestStop();
+        Add(cancelButton);
+    }
+
+    private void CreateUsernamePasswordUI()
+    {
+        var usernameLabel = new Label("Username:")
+        {
+            X = 1,
+            Y = Pos.Bottom(_statusLabel!) + 1
+        };
+        Add(usernameLabel);
+
+        var usernameField = new TextField("")
+        {
+            X = Pos.Right(usernameLabel) + 1,
+            Y = Pos.Top(usernameLabel),
+            Width = 50
+        };
+        Add(usernameField);
+
+        var passwordLabel = new Label("Password:")
+        {
+            X = 1,
+            Y = Pos.Bottom(usernameField) + 1
+        };
+        Add(passwordLabel);
+
+        var passwordField = new TextField("")
+        {
+            X = Pos.Right(passwordLabel) + 1,
+            Y = Pos.Top(passwordLabel),
+            Width = 50,
+            Secret = true
+        };
+        Add(passwordField);
+
+        var authenticateButton = new Button("Authenticate")
+        {
+            X = 1,
+            Y = Pos.Bottom(passwordField) + 1
+        };
+        authenticateButton.Clicked += async () => await AuthenticateWithUsernamePassword(
+            usernameField.Text.ToString()!,
+            passwordField.Text.ToString()!);
+        Add(authenticateButton);
+
+        var cancelButton = new Button("Cancel")
+        {
+            X = Pos.Right(authenticateButton) + 2,
+            Y = Pos.Top(authenticateButton)
+        };
+        cancelButton.Clicked += () => RequestStop();
+        Add(cancelButton);
+    }
+
+    private async Task AuthenticateWithOAuth()
+    {
+        _statusLabel!.Text = "Authenticating with OAuth...";
+        try
+        {
+            var result = await _authService.AuthenticateWithOAuthAsync(_environment);
+            if (result.IsSuccessful)
+            {
+                _statusLabel.Text = "Authentication successful! Closing...";
+                System.Threading.Thread.Sleep(1000);
+                RequestStop();
+            }
+            else
+            {
+                _statusLabel.Text = $"Authentication failed: {result.ErrorMessage}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _statusLabel.Text = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task AuthenticateWithClientSecret(string tenantId, string clientId, string clientSecret)
+    {
+        if (string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
+        {
+            _statusLabel!.Text = "All fields are required";
+            return;
+        }
+
+        _statusLabel!.Text = "Authenticating with Client Secret...";
+        try
+        {
+            var credentials = new ClientSecretCredentials
+            {
+                EnvironmentId = _environment.Id,
+                TenantId = tenantId,
+                ClientId = clientId,
+                ClientSecret = clientSecret
+            };
+
+            var result = await _authService.AuthenticateWithClientSecretAsync(_environment, credentials);
+            if (result.IsSuccessful)
+            {
+                _statusLabel.Text = "Authentication successful! Closing...";
+                System.Threading.Thread.Sleep(1000);
+                RequestStop();
+            }
+            else
+            {
+                _statusLabel.Text = $"Authentication failed: {result.ErrorMessage}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _statusLabel.Text = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task AuthenticateWithUsernamePassword(string username, string password)
+    {
+        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+        {
+            _statusLabel!.Text = "Username and password are required";
+            return;
+        }
+
+        _statusLabel!.Text = "Authenticating with Username/Password...";
+        try
+        {
+            var credentials = new UsernamePasswordCredentials
+            {
+                EnvironmentId = _environment.Id,
+                Username = username,
+                Password = password
+            };
+
+            var result = await _authService.AuthenticateWithUsernamePasswordAsync(_environment, credentials);
+            if (result.IsSuccessful)
+            {
+                _statusLabel.Text = "Authentication successful! Closing...";
+                System.Threading.Thread.Sleep(1000);
+                RequestStop();
+            }
+            else
+            {
+                _statusLabel.Text = $"Authentication failed: {result.ErrorMessage}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _statusLabel.Text = $"Error: {ex.Message}";
+        }
+    }
+}

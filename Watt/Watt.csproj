@@ -8,11 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.PowerPlatform.Dataverse.Client" Version="1.2.10" />
     <PackageReference Include="Terminal.Gui" Version="1.19.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="UI\" />
+    <Folder Include="Tools\Dataverse\" />
+    <Folder Include="Tools\DRF\" />
   </ItemGroup>
 
 </Project>
