@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Microsoft.PowerPlatform.Dataverse.Client;
 
-namespace Watt.Tools;
+namespace Watt.Tools.DRF;
 
 internal class DrfTool
 {

@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -113,7 +114,7 @@ public class AesEncryptionProvider : ICryptoProvider
             if (OperatingSystem.IsWindows())
             {
                 return GetWindowsMachineId();
-            }
+            } 
             else if (OperatingSystem.IsMacOS())
             {
                 return GetMacMachineId();
@@ -144,17 +145,25 @@ public class AesEncryptionProvider : ICryptoProvider
     /// <summary>
     /// Gets Windows machine ID from registry.
     /// </summary>
+    [SupportedOSPlatform("windows")]
     private static string GetWindowsMachineId()
     {
         try
         {
-            var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
-                @"SOFTWARE\Microsoft\Cryptography");
-            var machineGuid = key?.GetValue("MachineGuid") as string;
-            return machineGuid ?? System.Net.Dns.GetHostName();
+            using (var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Cryptography"))
+            {
+                if (key == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("Warning: Could not open registry key for MachineGuid.");
+                    return System.Net.Dns.GetHostName();
+                }
+                var machineGuid = key.GetValue("MachineGuid") as string;
+                return machineGuid ?? System.Net.Dns.GetHostName();
+            }
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"Warning: Exception reading MachineGuid: {ex.Message}");
             return System.Net.Dns.GetHostName();
         }
     }
@@ -162,6 +171,7 @@ public class AesEncryptionProvider : ICryptoProvider
     /// <summary>
     /// Gets macOS machine ID from system.
     /// </summary>
+    [SupportedOSPlatform("macos")]
     private static string GetMacMachineId()
     {
         try
@@ -214,6 +224,7 @@ public class AesEncryptionProvider : ICryptoProvider
     /// <summary>
     /// Gets Linux machine ID from /etc/machine-id or /var/lib/dbus/machine-id.
     /// </summary>
+    [SupportedOSPlatform("linux")]
     private static string GetLinuxMachineId()
     {
         try

@@ -12,7 +12,7 @@ public class OAuthAuthenticationProvider : IAuthenticationProvider
 {
     public AuthenticationMethod Method => AuthenticationMethod.OAuth;
 
-    private const string ClientId = "51f81489-12ee-4a9e-aaae-a2591f45987d"; // Change this to your registered app ID
+    private const string ClientId = "53aebc6f-46b8-4d08-9829-90234d17fd9e";
     private const string TenantId = "organizations"; // Multi-tenant
     private const string Scopes = "https://org.crm.dynamics.com/.default";
 

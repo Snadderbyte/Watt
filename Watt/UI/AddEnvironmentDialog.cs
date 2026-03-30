@@ -33,8 +33,8 @@ public class AddEnvironmentDialog : Dialog
     private void InitializeUI()
     {
         Title = "Add New Environment";
-        Width = 70;
-        Height = 12;
+        Width = Dim.Auto();
+        Height = Dim.Auto();
 
         _instructionsLabel = new Label()
         {
@@ -78,7 +78,7 @@ public class AddEnvironmentDialog : Dialog
             Width = 40
         };
         Add(urlField);
-
+        
         var authMethodLabel = new Label()
         {
             Text = "Auth Method:",
@@ -86,7 +86,6 @@ public class AddEnvironmentDialog : Dialog
             Y = Pos.Bottom(urlField) + 1
         };
         Add(authMethodLabel);
-
         var authMethods = new string[] { "OAuth", "Client Secret", "Username/Password" };
         var authOptionSelector = new OptionSelector()
         {
