@@ -33,7 +33,7 @@ public class AppState
     /// <summary>
     /// Switches to a different environment and establishes a connection.
     /// </summary>
-    public async System.Threading.Tasks.Task<bool> SwitchEnvironmentAsync(string environmentId)
+    public async Task<bool> SwitchEnvironmentAsync(string environmentId)
     {
         var environment = AuthenticationService.GetEnvironment(environmentId);
         if (environment == null)

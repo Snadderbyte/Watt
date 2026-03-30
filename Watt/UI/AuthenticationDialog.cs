@@ -1,6 +1,8 @@
 using System;
 using System.Threading.Tasks;
-using Terminal.Gui;
+using Terminal.Gui.App;
+using Terminal.Gui.ViewBase;
+using Terminal.Gui.Views;
 using Watt.Core.Authentication;
 
 namespace Watt.UI;
@@ -33,8 +35,9 @@ public class AuthenticationDialog : Dialog
         Width = 70;
         Height = 15;
 
-        _statusLabel = new Label("Preparing to authenticate...")
+        _statusLabel = new Label()
         {
+            Text = "Preparing to authenticate...",
             X = 1,
             Y = 1,
             Width = Dim.Fill(1)
@@ -54,72 +57,81 @@ public class AuthenticationDialog : Dialog
 
     private void CreateOAuthUI()
     {
-        var instructions = new Label("Click 'Authenticate' to sign in with your account.")
+        var instructions = new Label()
         {
+            Text = "Click 'Authenticate' to sign in with your account.",
             X = 1,
             Y = Pos.Bottom(_statusLabel!) + 1,
             Width = Dim.Fill(1)
         };
         Add(instructions);
 
-        var authenticateButton = new Button("Authenticate")
+        var authenticateButton = new Button()
         {
+            Text = "Authenticate",
             X = 1,
             Y = Pos.Bottom(instructions) + 1
         };
-        authenticateButton.Clicked += async () => await AuthenticateWithOAuth();
+        authenticateButton.Accepting += async (s, e) => await AuthenticateWithOAuth();
         Add(authenticateButton);
 
-        var cancelButton = new Button("Cancel")
+        var cancelButton = new Button()
         {
+            Text = "Cancel",
             X = Pos.Right(authenticateButton) + 2,
             Y = Pos.Top(authenticateButton)
         };
-        cancelButton.Clicked += () => RequestStop();
+        cancelButton.Accepting += (s, e) => RequestStop();
         Add(cancelButton);
     }
 
     private void CreateClientSecretUI()
     {
-        var tenantLabel = new Label("Tenant ID:")
+        var tenantLabel = new Label()
         {
+            Text = "Tenant ID:",
             X = 1,
             Y = Pos.Bottom(_statusLabel!) + 1
         };
         Add(tenantLabel);
 
-        var tenantField = new TextField("")
+        var tenantField = new TextField()
         {
+            Text = "",
             X = Pos.Right(tenantLabel) + 1,
             Y = Pos.Top(tenantLabel),
             Width = 50
         };
         Add(tenantField);
 
-        var clientIdLabel = new Label("Client ID:")
+        var clientIdLabel = new Label()
         {
+            Text = "Client ID:",
             X = 1,
             Y = Pos.Bottom(tenantField) + 1
         };
         Add(clientIdLabel);
 
-        var clientIdField = new TextField("")
+        var clientIdField = new TextField()
         {
+            Text = "",
             X = Pos.Right(clientIdLabel) + 1,
             Y = Pos.Top(clientIdLabel),
             Width = 50
         };
         Add(clientIdField);
 
-        var secretLabel = new Label("Client Secret:")
+        var secretLabel = new Label()
         {
+            Text = "Client Secret:",
             X = 1,
             Y = Pos.Bottom(clientIdField) + 1
         };
         Add(secretLabel);
 
-        var secretField = new TextField("")
+        var secretField = new TextField()
         {
+            Text = "",
             X = Pos.Right(secretLabel) + 1,
             Y = Pos.Top(secretLabel),
             Width = 50,
@@ -127,52 +139,58 @@ public class AuthenticationDialog : Dialog
         };
         Add(secretField);
 
-        var authenticateButton = new Button("Authenticate")
+        var authenticateButton = new Button()
         {
+            Text = "Authenticate",
             X = 1,
             Y = Pos.Bottom(secretField) + 1
         };
-        authenticateButton.Clicked += async () => await AuthenticateWithClientSecret(
+        authenticateButton.Accepting += async (s, e) => await AuthenticateWithClientSecret(
             tenantField.Text.ToString()!,
             clientIdField.Text.ToString()!,
             secretField.Text.ToString()!);
         Add(authenticateButton);
 
-        var cancelButton = new Button("Cancel")
+        var cancelButton = new Button()
         {
+            Text = "Cancel",
             X = Pos.Right(authenticateButton) + 2,
             Y = Pos.Top(authenticateButton)
         };
-        cancelButton.Clicked += () => RequestStop();
+        cancelButton.Accepting += (s, e) => RequestStop();
         Add(cancelButton);
     }
 
     private void CreateUsernamePasswordUI()
     {
-        var usernameLabel = new Label("Username:")
+        var usernameLabel = new Label()
         {
+            Text = "Username:",
             X = 1,
             Y = Pos.Bottom(_statusLabel!) + 1
         };
         Add(usernameLabel);
 
-        var usernameField = new TextField("")
+        var usernameField = new TextField()
         {
+            Text = "",
             X = Pos.Right(usernameLabel) + 1,
             Y = Pos.Top(usernameLabel),
             Width = 50
         };
         Add(usernameField);
 
-        var passwordLabel = new Label("Password:")
+        var passwordLabel = new Label()
         {
+            Text = "Password:",
             X = 1,
             Y = Pos.Bottom(usernameField) + 1
         };
         Add(passwordLabel);
 
-        var passwordField = new TextField("")
+        var passwordField = new TextField()
         {
+            Text = "",
             X = Pos.Right(passwordLabel) + 1,
             Y = Pos.Top(passwordLabel),
             Width = 50,
@@ -180,22 +198,24 @@ public class AuthenticationDialog : Dialog
         };
         Add(passwordField);
 
-        var authenticateButton = new Button("Authenticate")
+        var authenticateButton = new Button()
         {
+            Text = "Authenticate",
             X = 1,
             Y = Pos.Bottom(passwordField) + 1
         };
-        authenticateButton.Clicked += async () => await AuthenticateWithUsernamePassword(
+        authenticateButton.Accepting += async (s, e) => await AuthenticateWithUsernamePassword(
             usernameField.Text.ToString()!,
             passwordField.Text.ToString()!);
         Add(authenticateButton);
 
-        var cancelButton = new Button("Cancel")
+        var cancelButton = new Button()
         {
+            Text = "Cancel",
             X = Pos.Right(authenticateButton) + 2,
             Y = Pos.Top(authenticateButton)
         };
-        cancelButton.Clicked += () => RequestStop();
+        cancelButton.Accepting += (s, e) => RequestStop();
         Add(cancelButton);
     }
 
@@ -207,8 +227,6 @@ public class AuthenticationDialog : Dialog
             var result = await _authService.AuthenticateWithOAuthAsync(_environment);
             if (result.IsSuccessful)
             {
-                _statusLabel.Text = "Authentication successful! Closing...";
-                System.Threading.Thread.Sleep(1000);
                 RequestStop();
             }
             else
@@ -244,8 +262,6 @@ public class AuthenticationDialog : Dialog
             var result = await _authService.AuthenticateWithClientSecretAsync(_environment, credentials);
             if (result.IsSuccessful)
             {
-                _statusLabel.Text = "Authentication successful! Closing...";
-                System.Threading.Thread.Sleep(1000);
                 RequestStop();
             }
             else
@@ -280,8 +296,6 @@ public class AuthenticationDialog : Dialog
             var result = await _authService.AuthenticateWithUsernamePasswordAsync(_environment, credentials);
             if (result.IsSuccessful)
             {
-                _statusLabel.Text = "Authentication successful! Closing...";
-                System.Threading.Thread.Sleep(1000);
                 RequestStop();
             }
             else

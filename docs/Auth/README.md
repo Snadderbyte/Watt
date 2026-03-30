@@ -114,12 +114,13 @@ if (connection?.IsReady == true)
 
 #### `CredentialManager`
 Handles secure credential storage:
-- Encrypts credentials using Windows DPAPI
+- Encrypts credentials using cross-platform AES encryption
+- Key derived from machine and user identifiers (similar to DPAPI but works on Windows, macOS, and Linux)
 - Persists to user's AppData folder
 - Loads credentials on startup
 
-Stored in: `%APPDATA%\Watt\`
-- `watt_credentials.json` (encrypted)
+Stored in: `%APPDATA%\Watt\` (Windows), `~/.config/Watt/` (Linux), or `~/Library/Application Support/Watt/` (macOS)
+- `watt_credentials.json` (encrypted with AES)
 - `watt_environments.json` (plain JSON)
 
 ### UI Components
@@ -258,10 +259,12 @@ if (connection?.IsReady == true)
 
 ## Security Considerations
 
-1. **DPAPI Encryption**
-   - Credentials are encrypted using Windows DPAPI at rest
-   - Encryption is user-specific (tied to Windows user account)
-   - Not suitable for roaming profiles without additional configuration
+1. **Cross-Platform AES Encryption**
+   - Credentials are encrypted using AES-256 encryption
+   - Encryption key is derived from machine and user identifiers using PBKDF2
+   - This provides per-user, per-machine encryption similar to Windows DPAPI
+   - Works on Windows, macOS, and Linux
+   - Credentials are not transferable between machines or users
 
 2. **Token Expiration**
    - OAuth tokens are validated before use
@@ -309,16 +312,22 @@ if (connection?.IsReady == true)
 - Verify credentials in portal
 
 ### Credentials Not Loading
-- Check `%APPDATA%\Watt\` folder exists
-- Verify DPAPI encryption not corrupted
-- Re-authenticate if files deleted
-- Check Windows user permissions
+- Check AppData folder exists (`%APPDATA%\Watt\` on Windows, `~/.config/Watt/` on Linux, or `~/Library/Application Support/Watt/` on macOS)
+- Verify AES encryption not corrupted
+- Re-authenticate if credential files are corrupted
+- Check file permissions on the credentials directory
 
 ### Connection Fails After Authentication
 - Validate credentials using `ValidateCredentialsAsync`
 - Check organization URL
 - Verify user/service principal has environment access
 - Check network connectivity
+
+### Cross-Platform Issues
+- Encryption keys are derived from machine identifiers and username
+- Credentials will not transfer between machines or user accounts
+- On Linux, ensure `/etc/machine-id` or `/var/lib/dbus/machine-id` is readable
+- On macOS, `ioreg` command is used to get machine UUID
 
 ## Future Enhancements
 

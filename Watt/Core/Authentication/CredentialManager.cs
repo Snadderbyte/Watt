@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using Watt.Core.Authentication.Encryption;
 
 namespace Watt.Core.Authentication;
 
@@ -19,6 +19,7 @@ public class CredentialManager : IAsyncDisposable
     private readonly string _storageDirectory;
     private readonly Dictionary<string, Credentials> _credentialsCache;
     private readonly Dictionary<string, EnvironmentDetails> _environmentsCache;
+    private readonly ICryptoProvider _cryptoProvider;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -36,6 +37,7 @@ public class CredentialManager : IAsyncDisposable
 
         _credentialsCache = new Dictionary<string, Credentials>(StringComparer.OrdinalIgnoreCase);
         _environmentsCache = new Dictionary<string, EnvironmentDetails>(StringComparer.OrdinalIgnoreCase);
+        _cryptoProvider = new AesEncryptionProvider();
 
         Directory.CreateDirectory(_storageDirectory);
     }
@@ -205,23 +207,19 @@ public class CredentialManager : IAsyncDisposable
     }
 
     /// <summary>
-    /// Encrypts data using DPAPI (Windows Data Protection API) for user-specific encryption.
+    /// Encrypts data using the cross-platform AES encryption provider.
     /// </summary>
     private string EncryptData(string data)
     {
-        var dataBytes = System.Text.Encoding.UTF8.GetBytes(data);
-        var encryptedBytes = ProtectedData.Protect(dataBytes, null, DataProtectionScope.CurrentUser);
-        return Convert.ToBase64String(encryptedBytes);
+        return _cryptoProvider.Encrypt(data);
     }
 
     /// <summary>
-    /// Decrypts data that was encrypted with DPAPI.
+    /// Decrypts data that was encrypted with the AES encryption provider.
     /// </summary>
     private string DecryptData(string encryptedData)
     {
-        var encryptedBytes = Convert.FromBase64String(encryptedData);
-        var decryptedBytes = ProtectedData.Unprotect(encryptedBytes, null, DataProtectionScope.CurrentUser);
-        return System.Text.Encoding.UTF8.GetString(decryptedBytes);
+        return _cryptoProvider.Decrypt(encryptedData);
     }
 
     public async ValueTask DisposeAsync()
