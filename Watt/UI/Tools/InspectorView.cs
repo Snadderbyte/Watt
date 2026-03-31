@@ -1,19 +1,19 @@
-﻿using Watt.Core;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
+using Watt.Core;
 
-namespace Watt.UI;
+namespace Watt.UI.Tools;
 
-internal class DrfView : IToolView
+internal class InspectorView : IToolView
 {
-    public string Id => "T0001";
-    public string Name => "Duplicate Row Finder";
+    public string Id => "T0002";
+    public string Name => "Inspector";
 
     public View CreateView(AppState state)
     {
         return new Label
         {
-            Text = "Duplicate Row Finder - Main View",
+            Text = "Inspector - Main View",
             X = 1,
             Y = 1,
             Width = Dim.Fill(2),

@@ -5,7 +5,7 @@ using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Watt.Core.Authentication;
 
-namespace Watt.UI;
+namespace Watt.UI.Connection;
 
 /// <summary>
 /// Dialog for authenticating with a Dataverse environment.
@@ -16,6 +16,9 @@ public class AuthenticationDialog : Dialog
     private readonly DataverseConnectionManager _connectionManager;
     private readonly EnvironmentDetails _environment;
     private Label? _statusLabel;
+
+    private bool _isAuthenticating;
+    public bool AuthenticationSucceeded { get; private set; }
 
     public AuthenticationDialog(
         AuthenticationService authService,
@@ -32,8 +35,8 @@ public class AuthenticationDialog : Dialog
     private void InitializeUI()
     {
         Title = $"Authenticate - {_environment.Name}";
-        Width = 70;
-        Height = 15;
+        Width = Dim.Auto();
+        Height = Dim.Auto();
 
         _statusLabel = new Label()
         {
@@ -72,7 +75,17 @@ public class AuthenticationDialog : Dialog
             X = 1,
             Y = Pos.Bottom(instructions) + 1
         };
-        authenticateButton.Accepting += async (s, e) => await AuthenticateWithOAuth();
+        authenticateButton.Accepting += (s, e) =>
+        {
+            e.Handled = true;
+
+            if (_isAuthenticating)
+            {
+                return;
+            }
+
+            _ = AuthenticateWithOAuthAsync();
+        };
         Add(authenticateButton);
 
         var cancelButton = new Button()
@@ -145,10 +158,20 @@ public class AuthenticationDialog : Dialog
             X = 1,
             Y = Pos.Bottom(secretField) + 1
         };
-        authenticateButton.Accepting += async (s, e) => await AuthenticateWithClientSecret(
-            tenantField.Text.ToString()!,
-            clientIdField.Text.ToString()!,
-            secretField.Text.ToString()!);
+        authenticateButton.Accepting += (s, e) =>
+        {
+            e.Handled = true;
+
+            if (_isAuthenticating)
+            {
+                return;
+            }
+
+            _ = AuthenticateWithClientSecretAsync(
+                tenantField.Text.ToString()!,
+                clientIdField.Text.ToString()!,
+                secretField.Text.ToString()!);
+        };
         Add(authenticateButton);
 
         var cancelButton = new Button()
@@ -204,9 +227,19 @@ public class AuthenticationDialog : Dialog
             X = 1,
             Y = Pos.Bottom(passwordField) + 1
         };
-        authenticateButton.Accepting += async (s, e) => await AuthenticateWithUsernamePassword(
-            usernameField.Text.ToString()!,
-            passwordField.Text.ToString()!);
+        authenticateButton.Accepting += (s, e) =>
+        {
+            e.Handled = true;
+
+            if (_isAuthenticating)
+            {
+                return;
+            }
+
+            _ = AuthenticateWithUsernamePasswordAsync(
+                usernameField.Text.ToString()!,
+                passwordField.Text.ToString()!);
+        };
         Add(authenticateButton);
 
         var cancelButton = new Button()
@@ -219,6 +252,63 @@ public class AuthenticationDialog : Dialog
         Add(cancelButton);
     }
 
+    private async Task AuthenticateWithOAuthAsync()
+    {
+        if (_isAuthenticating)
+        {
+            return;
+        }
+
+        _isAuthenticating = true;
+
+        try
+        {
+            await AuthenticateWithOAuth();
+        }
+        finally
+        {
+            _isAuthenticating = false;
+        }
+    }
+
+    private async Task AuthenticateWithClientSecretAsync(string tenantId, string clientId, string clientSecret)
+    {
+        if (_isAuthenticating)
+        {
+            return;
+        }
+
+        _isAuthenticating = true;
+
+        try
+        {
+            await AuthenticateWithClientSecret(tenantId, clientId, clientSecret);
+        }
+        finally
+        {
+            _isAuthenticating = false;
+        }
+    }
+
+    private async Task AuthenticateWithUsernamePasswordAsync(string username, string password)
+    {
+        if (_isAuthenticating)
+        {
+            return;
+        }
+
+        _isAuthenticating = true;
+
+        try
+        {
+            await AuthenticateWithUsernamePassword(username, password);
+        }
+        finally
+        {
+            _isAuthenticating = false;
+        }
+    }
+
     private async Task AuthenticateWithOAuth()
     {
         _statusLabel!.Text = "Authenticating with OAuth...";
@@ -227,6 +317,7 @@ public class AuthenticationDialog : Dialog
             var result = await _authService.AuthenticateWithOAuthAsync(_environment);
             if (result.IsSuccessful)
             {
+                AuthenticationSucceeded = true;
                 RequestStop();
             }
             else
@@ -262,6 +353,7 @@ public class AuthenticationDialog : Dialog
             var result = await _authService.AuthenticateWithClientSecretAsync(_environment, credentials);
             if (result.IsSuccessful)
             {
+                AuthenticationSucceeded = true;
                 RequestStop();
             }
             else
@@ -296,6 +388,7 @@ public class AuthenticationDialog : Dialog
             var result = await _authService.AuthenticateWithUsernamePasswordAsync(_environment, credentials);
             if (result.IsSuccessful)
             {
+                AuthenticationSucceeded = true;
                 RequestStop();
             }
             else

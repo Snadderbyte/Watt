@@ -3,7 +3,7 @@ using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Watt.Core.Authentication;
 
-namespace Watt.UI;
+namespace Watt.UI.Connection;
 
 /// <summary>
 /// Dialog for adding a new Dataverse environment and authenticating.
@@ -15,6 +15,7 @@ public class AddEnvironmentDialog : Dialog
     private readonly AuthenticationService _authService;
     private readonly DataverseConnectionManager _connectionManager;
     private Label? _instructionsLabel;
+    private bool _isSubmitting;
 
     public AddEnvironmentDialog(
         IApplication app,
@@ -101,36 +102,19 @@ public class AddEnvironmentDialog : Dialog
             X = 2,
             Y = Pos.Bottom(authOptionSelector) + 1
         };
-        nextButton.Accepting += async (s, e) =>
+        nextButton.Accepting += (s, e) =>
         {
-            if (string.IsNullOrWhiteSpace(nameField.Text.ToString()))
+            e.Handled = true;
+
+            if (_isSubmitting)
             {
-                MessageBox.ErrorQuery(_app, "Validation Error", "Environment name is required", "OK");
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(urlField.Text.ToString()) || !urlField.Text.ToString()!.StartsWith("https://"))
-            {
-                MessageBox.ErrorQuery(_app, "Validation Error", "Valid organization URL is required", "OK");
-                return;
-            }
-
-            var environmentId = Guid.NewGuid().ToString();
-            var environment = new EnvironmentDetails
-            {
-                Id = environmentId,
-                Name = nameField.Text.ToString()!,
-                OrgUrl = urlField.Text.ToString()!,
-                AuthMethod = (AuthenticationMethod)(authOptionSelector.Value ?? 0)
-            };
-
-            await _authService.RegisterEnvironmentAsync(environment);
-
-            var authDialog = new AuthenticationDialog(_authService, _connectionManager, environment);
-            _runDialog(authDialog);
-            authDialog.Dispose();
-
-            RequestStop();
+            _ = SubmitEnvironmentAsync(
+                nameField.Text.ToString(),
+                urlField.Text.ToString(),
+                authOptionSelector.Value);
         };
         Add(nextButton);
 
@@ -142,5 +126,60 @@ public class AddEnvironmentDialog : Dialog
         };
         cancelButton.Accepting += (s, e) => RequestStop();
         Add(cancelButton);
+    }
+
+    private async Task SubmitEnvironmentAsync(string? name, string? orgUrl, int? authMethodValue)
+    {
+        if (_isSubmitting)
+        {
+            return;
+        }
+
+        _isSubmitting = true;
+
+        try
+        {
+            await SubmitEnvironment(name, orgUrl, authMethodValue);
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private async Task SubmitEnvironment(string? name, string? orgUrl, int? authMethodValue)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            MessageBox.ErrorQuery(_app, "Validation Error", "Environment name is required", "OK");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(orgUrl) || !orgUrl.StartsWith("https://"))
+        {
+            MessageBox.ErrorQuery(_app, "Validation Error", "Valid organization URL is required", "OK");
+            return;
+        }
+
+        var environmentId = Guid.NewGuid().ToString();
+        var environment = new EnvironmentDetails
+        {
+            Id = environmentId,
+            Name = name,
+            OrgUrl = orgUrl,
+            AuthMethod = (AuthenticationMethod)(authMethodValue ?? 0)
+        };
+
+        await _authService.RegisterEnvironmentAsync(environment);
+
+        var authDialog = new AuthenticationDialog(_authService, _connectionManager, environment);
+        _runDialog(authDialog);
+        bool authenticationSucceeded = authDialog.AuthenticationSucceeded || environment.IsAuthenticated;
+        authDialog.Dispose();
+
+        if (authenticationSucceeded)
+        {
+            RequestStop();
+        }
     }
 }

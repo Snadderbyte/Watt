@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using Microsoft.PowerPlatform.Dataverse.Client;
+﻿using Microsoft.PowerPlatform.Dataverse.Client;
 using Watt.Core.Authentication;
 
 namespace Watt.Core;

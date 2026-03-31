@@ -4,7 +4,8 @@ using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Watt.Core;
 using Watt.Core.Authentication;
-using Watt.UI;
+using Watt.UI.Connection;
+using Watt.UI.Tools;
 
 using var app = Application.Create().Init();
 
@@ -24,6 +25,7 @@ var appState = new AppState
 var tools = new List<IToolView>
 {
     new DrfView(),
+    new InspectorView()
 };
 
 tools.Sort((x, y) => string.Compare(x.Name, y.Name, StringComparison.Ordinal));
@@ -37,45 +39,7 @@ var win = new Window()
     Height = Dim.Fill()
 };
 
-// Create environment selector button in top area
-var environmentStatusLabel = new Label()
-{
-    Text =  "Environment",
-    X = 1,
-    Y = 0,
-    Width = 50
-};
-
-var selectEnvironmentButton = new Button()
-{
-    Text =  "Select Environment",
-    X = Pos.Right(environmentStatusLabel),
-    Y = 0
-};
-selectEnvironmentButton.Accepting += (s, e) =>
-{
-    var envDialog = new EnvironmentSelectorDialog(app, dialog => app.Run(dialog), authService, connectionManager);
-    app.Run(envDialog);
-    envDialog.Dispose();
-
-    // Update status
-    if (!string.IsNullOrEmpty(appState.CurrentEnvironmentId))
-    {
-        var env = authService.GetEnvironment(appState.CurrentEnvironmentId);
-        if (env != null)
-            environmentStatusLabel.Text = $"Connected: {env.Name}";
-    }
-};
-
-var topBar = new FrameView()
-{
-    Text = "Connection",
-    X = 0,
-    Y = 0,
-    Width = Dim.Fill(),
-    Height = 3
-};
-topBar.Add(environmentStatusLabel, selectEnvironmentButton);
+var topBar = new TopBarView(app, appState, authService, connectionManager);
 
 var toolNames = new ObservableCollection<string>(tools.ConvertAll(t => t.Name));
 var listView = new ListView
@@ -89,7 +53,7 @@ listView.SetSource<string>(toolNames);
 
 var mainPanel = new FrameView()
 {
-    Title = "Tools",
+    Title = "No Tool Selected",
     X = Pos.Right(listView),
     Y = Pos.Bottom(topBar),
     Width = Dim.Fill(),
