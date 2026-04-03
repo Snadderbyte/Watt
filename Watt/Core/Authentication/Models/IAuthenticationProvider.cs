@@ -21,12 +21,10 @@ public interface IAuthenticationProvider
     Task<AuthenticationResult> AuthenticateAsync(EnvironmentDetails environment);
 
     /// <summary>
-    /// Validates if the provided credentials are still valid.
+    /// Validates if credentials are still usable for the given environment.
+    /// For providers that do not store credentials (e.g. AzureCli), pass null.
     /// </summary>
-    /// <param name="credentials">The credentials to validate.</param>
-    /// <param name="environment">The environment to validate against.</param>
-    /// <returns>True if credentials are valid, false otherwise.</returns>
-    Task<bool> ValidateAsync(Credentials credentials, EnvironmentDetails environment);
+    Task<bool> ValidateAsync(Credentials? credentials, EnvironmentDetails environment);
 }
 
 /// <summary>
@@ -34,30 +32,13 @@ public interface IAuthenticationProvider
 /// </summary>
 public class AuthenticationResult
 {
-    /// <summary>
-    /// Whether authentication was successful.
-    /// </summary>
     public bool IsSuccessful { get; set; }
-
-    /// <summary>
-    /// The obtained credentials (null if not successful).
-    /// </summary>
     public Credentials? Credentials { get; set; }
-
-    /// <summary>
-    /// Error message if authentication failed.
-    /// </summary>
     public string? ErrorMessage { get; set; }
 
-    /// <summary>
-    /// Creates a successful result.
-    /// </summary>
-    public static AuthenticationResult Success(Credentials credentials) => 
+    public static AuthenticationResult Success(Credentials? credentials = null) =>
         new() { IsSuccessful = true, Credentials = credentials };
 
-    /// <summary>
-    /// Creates a failed result.
-    /// </summary>
-    public static AuthenticationResult Failure(string errorMessage) => 
+    public static AuthenticationResult Failure(string errorMessage) =>
         new() { IsSuccessful = false, ErrorMessage = errorMessage };
 }

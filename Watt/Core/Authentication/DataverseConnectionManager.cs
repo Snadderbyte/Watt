@@ -1,71 +1,59 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Azure.Core;
+using Azure.Identity;
 using Microsoft.PowerPlatform.Dataverse.Client;
 
 namespace Watt.Core.Authentication;
 
 /// <summary>
-/// Manages connections to Dataverse organizations.
-/// Handles creating and caching Dataverse ServiceClient instances.
+/// Manages Dataverse ServiceClient instances, one per environment.
+/// Tokens are obtained on each connection call via the Azure CLI credential —
+/// no token caching or storage is done here.
 /// </summary>
-public class DataverseConnectionManager : IAsyncDisposable
+public class DataverseConnectionManager(AuthenticationService authService) : IAsyncDisposable
 {
-    private readonly AuthenticationService _authService;
-    private readonly Dictionary<string, ServiceClient> _connections;
-
-    public DataverseConnectionManager(AuthenticationService authService)
-    {
-        _authService = authService;
-        _connections = new Dictionary<string, ServiceClient>(StringComparer.OrdinalIgnoreCase);
-    }
+    private readonly Dictionary<string, ServiceClient> _connections = new(StringComparer.OrdinalIgnoreCase);
+    private readonly AzureCliCredential _credential = new();
 
     /// <summary>
-    /// Gets or creates a Dataverse connection for the specified environment.
+    /// Gets or creates a Dataverse ServiceClient for the given environment.
+    /// Returns null if the environment is not registered or the connection fails.
     /// </summary>
     public async Task<ServiceClient?> GetConnectionAsync(string environmentId)
     {
-        // Return cached connection if available and valid
         if (_connections.TryGetValue(environmentId, out var existingClient))
         {
             if (existingClient.IsReady)
                 return existingClient;
-            else
-                _connections.Remove(environmentId);
+
+            _connections.Remove(environmentId);
         }
 
-        // Get environment and credentials
-        var environment = _authService.GetEnvironment(environmentId);
+        var environment = authService.GetEnvironment(environmentId);
         if (environment == null)
             return null;
 
-        var credentials = _authService.GetCredentials(environmentId);
-        if (credentials == null)
-            return null;
-
-        // Create new connection
         try
         {
-            ServiceClient client = credentials switch
-            {
-                OAuthCredentials oauth => new ServiceClient(
-                    new Uri(environment.OrgUrl),
-                    async _ => await Task.FromResult(oauth.AccessToken),
-                    true),
-                UsernamePasswordCredentials userPass => new ServiceClient(
-                    $"AuthType=OAuth;Url={environment.OrgUrl};Username={userPass.Username};Password={userPass.Password};AppId=51f81489-12ee-4a9e-aaae-a2591f45987d;RedirectUri=http://localhost/"),
-                _ => throw new NotSupportedException($"Credentials type {credentials.GetType().Name} not supported")
-            };
+            var scope = AzureCliAuthenticationProvider.BuildScope(environment.OrgUrl);
+            var client = new ServiceClient(
+                new Uri(environment.OrgUrl),
+                async _ =>
+                {
+                    var token = await _credential.GetTokenAsync(new TokenRequestContext(new[] { scope }));
+                    return token.Token;
+                },
+                true);
 
             if (client.IsReady)
             {
                 _connections[environmentId] = client;
                 return client;
             }
-            else
-            {
-                return null; // Connection failed
-            }
+
+            return null;
         }
         catch (Exception ex)
         {
@@ -74,36 +62,19 @@ public class DataverseConnectionManager : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Closes a specific connection.
-    /// </summary>
     public void CloseConnection(string environmentId)
     {
         if (_connections.TryGetValue(environmentId, out var client))
         {
-            try
-            {
-                client.Dispose();
-            }
-            catch { }
-
+            try { client.Dispose(); } catch { }
             _connections.Remove(environmentId);
         }
     }
 
-    /// <summary>
-    /// Closes all connections.
-    /// </summary>
-    public void CloseAllConnections()
+    private void CloseAllConnections()
     {
         foreach (var client in _connections.Values)
-        {
-            try
-            {
-                client.Dispose();
-            }
-            catch { }
-        }
+            try { client.Dispose(); } catch { }
 
         _connections.Clear();
     }

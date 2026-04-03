@@ -2,19 +2,18 @@ using System.Collections.ObjectModel;
 using Terminal.Gui.App;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
+using Watt.Core;
 using Watt.Core.Authentication;
 
 namespace Watt.UI.Connection;
 
-/// <summary>
-/// Dialog for selecting and managing Dataverse environments.
-/// </summary>
 public class EnvironmentSelectorDialog : Dialog
 {
     private readonly IApplication _app;
     private readonly Action<Dialog> _runDialog;
     private readonly AuthenticationService _authService;
     private readonly DataverseConnectionManager _connectionManager;
+    private readonly AppState _appState;
     private ListView? _environmentList;
     private Label? _statusLabel;
     private List<EnvironmentDetails> _environments;
@@ -25,12 +24,14 @@ public class EnvironmentSelectorDialog : Dialog
         IApplication app,
         Action<Dialog> runDialog,
         AuthenticationService authService,
-        DataverseConnectionManager connectionManager)
+        DataverseConnectionManager connectionManager,
+        AppState appState)
     {
         _app = app;
         _runDialog = runDialog;
         _authService = authService;
         _connectionManager = connectionManager;
+        _appState = appState;
         _environments = _authService.GetAllEnvironments().ToList();
 
         InitializeUi();
@@ -38,18 +39,17 @@ public class EnvironmentSelectorDialog : Dialog
 
     private void InitializeUi()
     {
-        Title = "Select Environment";
-        Width = 60;
+        Title  = "Select Environment";
+        Width  = 60;
         Height = 20;
 
-        var environmentNames = new ObservableCollection<string>(_environments.Select(e => 
-            $"{e.Name} ({e.AuthMethod}) - {(e.IsAuthenticated ? "✓" : "✗")}").ToList());
+        var environmentNames = new ObservableCollection<string>(_environments.Select(e => e.Name).ToList());
 
         _environmentList = new ListView()
         {
-            X = 1,
-            Y = 1,
-            Width = Dim.Fill(1),
+            X      = 1,
+            Y      = 1,
+            Width  = Dim.Fill(1),
             Height = Dim.Fill(4)
         };
         _environmentList.SetSource(environmentNames);
@@ -57,102 +57,55 @@ public class EnvironmentSelectorDialog : Dialog
 
         _statusLabel = new Label()
         {
-            Text = "Select an environment",
-            X = 1,
-            Y = Pos.Bottom(_environmentList) + 1,
+            Text  = "Select an environment",
+            X     = 1,
+            Y     = Pos.Bottom(_environmentList) + 1,
             Width = Dim.Fill(1)
         };
         Add(_statusLabel);
 
-        // Buttons
-        var addButton = new Button()
-        {
-            Text = "Add",
-            X = 1,
-            Y = Pos.Bottom(_statusLabel) + 1
-        };
+        var addButton = new Button() { Text = "Add", X = 1, Y = Pos.Bottom(_statusLabel) + 1 };
         addButton.Accepting += (s, e) => AddEnvironment();
         Add(addButton);
 
-        var connectButton = new Button()
-        {
-            Text = "Connect",
-            X = Pos.Right(addButton) + 1,
-            Y = Pos.Bottom(_statusLabel) + 1
-        };
+        var connectButton = new Button() { Text = "Connect", X = Pos.Right(addButton) + 1, Y = Pos.Bottom(_statusLabel) + 1 };
         connectButton.Accepting += (s, e) =>
         {
             e.Handled = true;
-
-            if (_isConnecting)
-            {
-                return;
-            }
-
-            _ = ConnectToEnvironmentAsync();
+            if (!_isConnecting)
+                _ = ConnectToEnvironmentAsync();
         };
         Add(connectButton);
 
-        var deleteButton = new Button()
-        {
-            Text = "Delete",
-            X = Pos.Right(connectButton) + 1,
-            Y = Pos.Bottom(_statusLabel) + 1
-        };
+        var deleteButton = new Button() { Text = "Delete", X = Pos.Right(connectButton) + 1, Y = Pos.Bottom(_statusLabel) + 1 };
         deleteButton.Accepting += (s, e) =>
         {
             e.Handled = true;
-
-            if (_isDeleting)
-            {
-                return;
-            }
-
-            _ = DeleteEnvironmentAsync();
+            if (!_isDeleting)
+                _ = DeleteEnvironmentAsync();
         };
         Add(deleteButton);
 
-        var closeButton = new Button()
-        {
-            Text = "Close",
-            X = Pos.Right(deleteButton) + 1,
-            Y = Pos.Bottom(_statusLabel) + 1
-        };
+        var closeButton = new Button() { Text = "Close", X = Pos.Right(deleteButton) + 1, Y = Pos.Bottom(_statusLabel) + 1 };
         closeButton.Accepting += (s, e) => RequestStop();
         Add(closeButton);
     }
 
     private void AddEnvironment()
     {
-        var dialog = new AddEnvironmentDialog(_app, _runDialog, _authService, _connectionManager);
+        var dialog = new AddEnvironmentDialog(_app, _runDialog, _authService);
         _runDialog(dialog);
         dialog.Dispose();
 
-        // Refresh the list
         _environments = _authService.GetAllEnvironments().ToList();
-        var environmentNames = new ObservableCollection<string>(_environments.Select(e =>
-            $"{e.Name} ({e.AuthMethod}) - {(e.IsAuthenticated ? "✓" : "✗")}").ToList());
-        
-        _environmentList!.SetSource<string>(environmentNames);
+        _environmentList!.SetSource<string>(new ObservableCollection<string>(_environments.Select(e => e.Name).ToList()));
     }
 
     private async Task ConnectToEnvironmentAsync()
     {
-        if (_isConnecting)
-        {
-            return;
-        }
-
         _isConnecting = true;
-
-        try
-        {
-            await ConnectToEnvironment();
-        }
-        finally
-        {
-            _isConnecting = false;
-        }
+        try { await ConnectToEnvironment(); }
+        finally { _isConnecting = false; }
     }
 
     private async Task ConnectToEnvironment()
@@ -169,23 +122,17 @@ public class EnvironmentSelectorDialog : Dialog
 
         try
         {
-            var isValid = await _authService.ValidateCredentialsAsync(selectedEnvironment.Id);
-            if (isValid)
+            var connection = await _connectionManager.GetConnectionAsync(selectedEnvironment.Id);
+            if (connection != null)
             {
-                var connection = await _connectionManager.GetConnectionAsync(selectedEnvironment.Id);
-                if (connection != null)
-                {
-                    _statusLabel.Text = $"Connected to {selectedEnvironment.Name}";
-                    RequestStop();
-                }
-                else
-                {
-                    _statusLabel.Text = "Failed to establish connection";
-                }
+                _appState.CurrentEnvironmentId = selectedEnvironment.Id;
+                _appState.Connection           = connection;
+                _statusLabel.Text              = $"Connected to {selectedEnvironment.Name}";
+                RequestStop();
             }
             else
             {
-                _statusLabel.Text = "Credentials invalid or expired";
+                _statusLabel.Text = "Failed to connect. Make sure you are logged in with 'az login'.";
             }
         }
         catch (Exception ex)
@@ -196,21 +143,9 @@ public class EnvironmentSelectorDialog : Dialog
 
     private async Task DeleteEnvironmentAsync()
     {
-        if (_isDeleting)
-        {
-            return;
-        }
-
         _isDeleting = true;
-
-        try
-        {
-            await DeleteEnvironment();
-        }
-        finally
-        {
-            _isDeleting = false;
-        }
+        try { await DeleteEnvironment(); }
+        finally { _isDeleting = false; }
     }
 
     private async Task DeleteEnvironment()
@@ -223,8 +158,8 @@ public class EnvironmentSelectorDialog : Dialog
         }
 
         var selectedEnvironment = _environments[selectedIndex.Value];
-        
-        if (MessageBox.Query(_app, "Confirm Delete", 
+
+        if (MessageBox.Query(_app, "Confirm Delete",
             $"Delete environment '{selectedEnvironment.Name}'?", "Yes", "No") != 0)
         {
             _statusLabel!.Text = "Delete cancelled";
@@ -233,20 +168,15 @@ public class EnvironmentSelectorDialog : Dialog
 
         await _authService.DeleteEnvironmentAsync(selectedEnvironment.Id);
         _environments.Remove(selectedEnvironment);
-        
-        var environmentNames = _environments.Select(e =>
-            $"{e.Name} ({e.AuthMethod}) - {(e.IsAuthenticated ? "✓" : "✗")}").ToList();
-        
-        _environmentList.SetSource<string>(new ObservableCollection<string>(environmentNames));
+        _environmentList.SetSource<string>(new ObservableCollection<string>(_environments.Select(e => e.Name).ToList()));
 
         if (_environments.Count == 0)
         {
-            _statusLabel!.Text = "Environment deleted. No environments available.";
+            _statusLabel!.Text = "No environments available.";
             return;
         }
 
-        var nextSelectedIndex = Math.Min(selectedIndex.Value, _environments.Count - 1);
-        _environmentList.SelectedItem = nextSelectedIndex;
-        _statusLabel!.Text = $"Environment '{selectedEnvironment.Name}' deleted";
+        _environmentList.SelectedItem = Math.Min(selectedIndex.Value, _environments.Count - 1);
+        _statusLabel!.Text             = $"Environment '{selectedEnvironment.Name}' deleted";
     }
 }

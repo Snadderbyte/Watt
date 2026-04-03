@@ -7,6 +7,8 @@ internal interface IToolView
     string Id { get; }
     string Name { get; }
 
+    AppState AppState { get; set; }
+
     /// <summary>
     /// Creates a new view representation based on the specified application state.
     /// </summary>
@@ -19,7 +21,7 @@ internal interface IToolView
     /// </summary>
     /// <param name="state">The current state of the application used to generate the view. Cannot be null.</param>
     /// <returns>A new instance of the view that reflects the provided application state.</returns>
-    View CreteToolbarView(AppState state);
+    View CreateToolbarView(AppState state);
     
     /// <summary>
     /// Handles logic that should occur when the component or application is activated.

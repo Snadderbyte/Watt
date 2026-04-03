@@ -4,10 +4,11 @@ using Watt.Core;
 
 namespace Watt.UI.Tools;
 
-internal class InspectorView : IToolView
+internal class InspectorView(AppState appState) : IToolView
 {
     public string Id => "T0002";
     public string Name => "Inspector";
+    public AppState AppState { get; set; } = appState;
 
     public View CreateView(AppState state)
     {
@@ -21,7 +22,7 @@ internal class InspectorView : IToolView
         };
     }
 
-    public View CreteToolbarView(AppState state)
+    public View CreateToolbarView(AppState state)
     {
         return new Label
         {

@@ -1,27 +1,72 @@
 ﻿using Watt.Core;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
+using Watt.Tools.DRF;
+using System.Collections.ObjectModel;
 
-namespace Watt.UI.Tools ;
+namespace Watt.UI.Tools;
 
-internal class DrfView : IToolView
+internal class DrfView(AppState appState) : IToolView
 {
     public string Id => "T0001";
     public string Name => "Duplicate Row Finder";
+    public AppState AppState { get; set; } = appState;
+
+    private DrfTool _drfTool = new(appState);
 
     public View CreateView(AppState state)
     {
-        return new Label
+        var loadingView = new TextView
         {
-            Text = "Duplicate Row Finder - Main View",
+            Text = "Loading entities...",
             X = 1,
             Y = 1,
             Width = Dim.Fill(2),
             Height = Dim.Fill(2),
+            ReadOnly = true,
+            WordWrap = true,
         };
+
+        var listView = new ListView
+        {
+            X = 1,
+            Y = 1,
+            Width = Dim.Fill(2),
+            Height = Dim.Fill(2),
+            Visible = false,
+        };
+
+        var container = new View
+        {
+            Width = Dim.Fill(),
+            Height = Dim.Fill(),
+        };
+
+        container.Add(loadingView, listView);
+
+        container.Initialized += async (s, e) =>
+        {
+            try
+            {
+                var entities = await _drfTool.GetAllEntitiesAsync();
+                var entityNames = new ObservableCollection<string>(
+                    entities.ConvertAll(en => en.LogicalName));
+
+                listView.SetSource<string>(entityNames);
+                loadingView.Visible = false;
+                listView.Visible = true;
+                container.SetNeedsDraw();
+            }
+            catch (Exception ex)
+            {
+                loadingView.Text = $"Error: {ex.Message}";
+            }
+        };
+
+        return container;
     }
 
-    public View CreteToolbarView(AppState state)
+    public View CreateToolbarView(AppState state)
     {
         return new Label
         {

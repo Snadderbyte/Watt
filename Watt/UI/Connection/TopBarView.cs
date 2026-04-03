@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Terminal.Gui.App;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
@@ -15,7 +16,7 @@ public class TopBarView : FrameView
     private readonly AppState _appState;
     private readonly AuthenticationService _authService;
     private readonly DataverseConnectionManager _connectionManager;
-    private readonly Label _environmentStatusLabel;
+    private readonly Button _selectEnvironmentButton;
 
     public TopBarView(
         IApplication app,
@@ -30,32 +31,24 @@ public class TopBarView : FrameView
 
         X = 0;
         Y = 0;
-        Width = Dim.Fill();
+        Width = 25;
         Height = 3;
+        Title = "Environment";
 
-        _environmentStatusLabel = new Label()
+        _selectEnvironmentButton = new Button()
         {
-            Text = "Environment",
-            X = 1,
-            Y = 0,
-            Width = 50
-        };
-
-        var selectEnvironmentButton = new Button()
-        {
-            Text = "Select Environment",
-            X = Pos.Right(_environmentStatusLabel),
+            X = 0,
             Y = 0
         };
-        selectEnvironmentButton.Accepting += OnSelectEnvironment;
+        _selectEnvironmentButton.Accepting += OnSelectEnvironment;
 
-        Add(_environmentStatusLabel, selectEnvironmentButton);
+        Add(_selectEnvironmentButton);
         RefreshEnvironmentStatus();
     }
 
     private void OnSelectEnvironment(object? sender, EventArgs e)
     {
-        var envDialog = new EnvironmentSelectorDialog(_app, dialog => _app.Run(dialog), _authService, _connectionManager);
+        var envDialog = new EnvironmentSelectorDialog(_app, dialog => _app.Run(dialog), _authService, _connectionManager, _appState);
         _app.Run(envDialog);
         envDialog.Dispose();
 
@@ -64,13 +57,14 @@ public class TopBarView : FrameView
 
     private void RefreshEnvironmentStatus()
     {
-        _environmentStatusLabel.Text = "Environment";
-
         if (string.IsNullOrEmpty(_appState.CurrentEnvironmentId))
+        {
+            _selectEnvironmentButton.Text = "Select Environment";
             return;
+        }
 
         var environment = _authService.GetEnvironment(_appState.CurrentEnvironmentId);
         if (environment != null)
-            _environmentStatusLabel.Text = $"Connected: {environment.Name}";
+            _selectEnvironmentButton.Text = environment.Name;
     }
 }

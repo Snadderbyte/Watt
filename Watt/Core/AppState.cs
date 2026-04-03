@@ -30,19 +30,14 @@ public class AppState
 
     /// <summary>
     /// Switches to a different environment and establishes a connection.
+    /// Validates that the Azure CLI can obtain a token before connecting.
     /// </summary>
     public async Task<bool> SwitchEnvironmentAsync(string environmentId)
     {
-        var environment = AuthenticationService.GetEnvironment(environmentId);
-        if (environment == null)
-            return false;
-
-        // Validate credentials exist and are valid
         var isValid = await AuthenticationService.ValidateCredentialsAsync(environmentId);
         if (!isValid)
             return false;
 
-        // Get or create connection
         var connection = await ConnectionManager.GetConnectionAsync(environmentId);
         if (connection == null)
             return false;

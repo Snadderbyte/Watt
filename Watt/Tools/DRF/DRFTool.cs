@@ -1,19 +1,38 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using Microsoft.PowerPlatform.Dataverse.Client;
+﻿using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Metadata;
+using Watt.Core;
+
+
 
 namespace Watt.Tools.DRF;
 
-internal class DrfTool
+internal class DrfTool 
 {
-    public string Id => "T0001";
-    public string Name => "Duplicate Row Finder";
+    public AppState AppState { get; set; }
     
-    public ServiceClient Connection { get; private set; }
-    
-    public DrfTool(ServiceClient connection)
+    public DrfTool(AppState appState)
     {
-        Connection = connection;
+        AppState = appState;
     }
+
+    public async Task<List<EntityMetadata>> GetAllEntitiesAsync()
+    {
+        if (AppState.Connection == null)
+            throw new InvalidOperationException("No active connection.");
+
+        var request = new RetrieveAllEntitiesRequest
+        {
+            EntityFilters = EntityFilters.Entity,
+            RetrieveAsIfPublished = true
+        };
+
+        var response = (RetrieveAllEntitiesResponse)AppState.Connection.Execute(request);
+        return [.. response.EntityMetadata.Select(em => new EntityMetadata
+        {
+            LogicalName = em.LogicalName,
+            DisplayName = em.DisplayName
+        })];
+    }
+
 }

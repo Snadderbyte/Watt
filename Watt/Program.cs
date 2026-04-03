@@ -1,11 +1,23 @@
 ﻿using System.Collections.ObjectModel;
 using Terminal.Gui.App;
+using Terminal.Gui.Drawing;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
+using Watt.CLI;
 using Watt.Core;
 using Watt.Core.Authentication;
 using Watt.UI.Connection;
 using Watt.UI.Tools;
+
+// --- CLI mode: handle env subcommands without launching the TUI ---
+if (args.Length > 0)
+{
+    var cliAuthService = new AuthenticationService();
+    await cliAuthService.InitializeAsync();
+    var exitCode = await CliHandler.RunAsync(args, cliAuthService);
+    await cliAuthService.DisposeAsync();
+    return exitCode;
+}
 
 using var app = Application.Create().Init();
 
@@ -24,43 +36,52 @@ var appState = new AppState
 
 var tools = new List<IToolView>
 {
-    new DrfView(),
-    new InspectorView()
+    new DrfView(appState),
+    new InspectorView(appState)
 };
 
 tools.Sort((x, y) => string.Compare(x.Name, y.Name, StringComparison.Ordinal));
 
 var win = new Window()
 {
-    Title =  "Watt",
     X = 0,
     Y = 0,
     Width = Dim.Fill(),
-    Height = Dim.Fill()
+    Height = Dim.Fill(),
+    BorderStyle = LineStyle.None,
 };
-
-var topBar = new TopBarView(app, appState, authService, connectionManager);
 
 var toolNames = new ObservableCollection<string>(tools.ConvertAll(t => t.Name));
 var listView = new ListView
 {
     X = 0,
-    Y = Pos.Bottom(topBar),
+    Y = 0,
     Width = 25,
     Height = Dim.Fill()
 };
 listView.SetSource<string>(toolNames);
+var topBar = new TopBarView(app, appState, authService, connectionManager);
+
+var listFrame = new FrameView()
+{
+    Title = "Tools",
+    X = 0,
+    Y = Pos.Bottom(topBar),
+    Width = 25,
+    Height = Dim.Fill()
+};
+listFrame.Add(listView);
 
 var mainPanel = new FrameView()
 {
     Title = "No Tool Selected",
-    X = Pos.Right(listView),
-    Y = Pos.Bottom(topBar),
+    X = Pos.Right(listFrame),
+    Y = 0,
     Width = Dim.Fill(),
     Height = Dim.Fill()
 };
 
-listView.ValueChanged += (s, args) =>
+listView.ValueChanged += async (s, args) =>
 {
     if (appState.Connection is not { IsReady: true })
     {
@@ -77,9 +98,10 @@ listView.ValueChanged += (s, args) =>
     var view = selectedTool.CreateView(appState);
     if (view is View v)
         mainPanel.Add(v);
+    mainPanel.Title = selectedTool.Name;
 };
 
-win.Add(topBar, listView, mainPanel);
+win.Add(topBar, listFrame, mainPanel);
 
 try
 {
@@ -92,3 +114,5 @@ finally
     await connectionManager.DisposeAsync();
     await authService.DisposeAsync();
 }
+
+return 0;
