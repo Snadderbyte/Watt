@@ -19,7 +19,7 @@ public class AzureCliAuthenticationProvider : IAuthenticationProvider
     {
         try
         {
-            var tokenContext = new TokenRequestContext(new[] { BuildScope(environment.OrgUrl) });
+            var tokenContext = new TokenRequestContext([BuildScope(environment.OrgUrl)]);
             await _credential.GetTokenAsync(tokenContext);
             return AuthenticationResult.Success();
         }
@@ -35,7 +35,7 @@ public class AzureCliAuthenticationProvider : IAuthenticationProvider
     {
         try
         {
-            var tokenContext = new TokenRequestContext(new[] { BuildScope(environment.OrgUrl) });
+            var tokenContext = new TokenRequestContext([BuildScope(environment.OrgUrl)]);
             await _credential.GetTokenAsync(tokenContext);
             return true;
         }

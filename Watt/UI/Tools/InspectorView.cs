@@ -4,43 +4,36 @@ using Watt.Core;
 
 namespace Watt.UI.Tools;
 
-internal class InspectorView(AppState appState) : IToolView
+internal class InspectorView : IToolView
 {
-    public string Id => "T0002";
-    public string Name => "Inspector";
-    public AppState AppState { get; set; } = appState;
+    public string Name { get; } = "Inspector";
+    public AppState AppState { get; set; }
+    public View View { get; set; }
 
-    public View CreateView(AppState state)
+    public InspectorView(AppState appState)
     {
-        return new Label
+        AppState = appState;
+        View = new View();
+    }
+
+    public void InitializeUi()
+    {
+        View.X = 0;
+        View.Y = 0;
+        View.Width = Dim.Fill();
+        View.Height = Dim.Fill() - 1;
+
+        var label = new Label
         {
-            Text = "Inspector - Main View",
+            Text = Name,
             X = 1,
             Y = 1,
             Width = Dim.Fill(2),
             Height = Dim.Fill(2),
         };
+
+        View.Add(label);
     }
 
-    public View CreateToolbarView(AppState state)
-    {
-        return new Label
-        {
-            Text = "Toolbar - (Add buttons here)",
-            X = 1,
-            Y = 0,
-            Width = Dim.Fill(2),
-            Height = 1,
-        };
-    }
-
-    public void OnActivated()
-    {
-        // Not implemented for this example, but you could add logic here to refresh data or set up the view when it's activated.
-    }
-
-    public void OnDeactivated()
-    {
-        // Not implemented for this example, but you could add logic here to clean up resources or save state when the view is deactivated.
-    }
+    public Task LoadAsync() => Task.CompletedTask;
 }

@@ -23,14 +23,6 @@ public class DataverseConnectionManager(AuthenticationService authService) : IAs
     /// </summary>
     public async Task<ServiceClient?> GetConnectionAsync(string environmentId)
     {
-        if (_connections.TryGetValue(environmentId, out var existingClient))
-        {
-            if (existingClient.IsReady)
-                return existingClient;
-
-            _connections.Remove(environmentId);
-        }
-
         var environment = authService.GetEnvironment(environmentId);
         if (environment == null)
             return null;
@@ -42,7 +34,7 @@ public class DataverseConnectionManager(AuthenticationService authService) : IAs
                 new Uri(environment.OrgUrl),
                 async _ =>
                 {
-                    var token = await _credential.GetTokenAsync(new TokenRequestContext(new[] { scope }));
+                    var token = await _credential.GetTokenAsync(new TokenRequestContext([scope]));
                     return token.Token;
                 },
                 true);

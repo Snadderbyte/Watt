@@ -6,85 +6,97 @@ using System.Collections.ObjectModel;
 
 namespace Watt.UI.Tools;
 
-internal class DrfView(AppState appState) : IToolView
+internal class DrfView : IToolView
 {
-    public string Id => "T0001";
-    public string Name => "Duplicate Row Finder";
-    public AppState AppState { get; set; } = appState;
+    public string Name { get; } = "Duplicate Row Finder";
+    public View View { get; set; }
+    public readonly AppState AppState;
+    private readonly DrfTool _drfTool;
 
-    private DrfTool _drfTool = new(appState);
+    private TextView? _loadingView;
+    private ListView? _entityList;
+    private ListView? _attributeList;
 
-    public View CreateView(AppState state)
+    public DrfView(AppState appState)
     {
-        var loadingView = new TextView
+        AppState = appState;
+        _drfTool = new DrfTool(appState);
+        View = new View();
+    }
+
+    public void InitializeUi()
+    {
+        var searchBar = new TextField
         {
-            Text = "Loading entities...",
             X = 1,
             Y = 1,
             Width = Dim.Fill(2),
-            Height = Dim.Fill(2),
+            Text = "Search entities..."
+        };
+
+        _loadingView = new TextView
+        {
+            Text = "Loading entities...",
+            X = 1,
+            Y = Pos.Bottom(searchBar),
+            Width = Dim.Fill(2),
+            Height = Dim.Fill(),
             ReadOnly = true,
             WordWrap = true,
         };
 
-        var listView = new ListView
+        _entityList = new ListView
         {
             X = 1,
-            Y = 1,
+            Y = Pos.Bottom(searchBar),
             Width = Dim.Fill(2),
-            Height = Dim.Fill(2),
+            Height = Dim.Fill(),
             Visible = false,
         };
 
-        var container = new View
-        {
-            Width = Dim.Fill(),
-            Height = Dim.Fill(),
-        };
-
-        container.Add(loadingView, listView);
-
-        container.Initialized += async (s, e) =>
-        {
-            try
-            {
-                var entities = await _drfTool.GetAllEntitiesAsync();
-                var entityNames = new ObservableCollection<string>(
-                    entities.ConvertAll(en => en.LogicalName));
-
-                listView.SetSource<string>(entityNames);
-                loadingView.Visible = false;
-                listView.Visible = true;
-                container.SetNeedsDraw();
-            }
-            catch (Exception ex)
-            {
-                loadingView.Text = $"Error: {ex.Message}";
-            }
-        };
-
-        return container;
+        View.Add(searchBar, _loadingView, _entityList);
     }
 
-    public View CreateToolbarView(AppState state)
+    public async Task LoadAsync()
     {
-        return new Label
+        if (_loadingView is null || _entityList is null || View is null)
+            return;
+
+        if (AppState.ServiceClient is not { IsReady: true })
         {
-            Text = "Toolbar - (Add buttons here)",
-            X = 1,
-            Y = 0,
-            Width = Dim.Fill(2),
-            Height = 1,
-        };
+            _loadingView.Text = "No connection. Please select an environment first.";
+            _loadingView.Visible = true;
+            _entityList.Visible = false;
+            return;
+        }
+
+        try
+        {
+            var entities = await _drfTool.GetAllEntitiesAsync();
+            var entityNames = new ObservableCollection<string>(
+                entities.ConvertAll(en => en.LogicalName));
+
+            _entityList.SetSource<string>(entityNames);
+            _loadingView.Visible = false;
+            _entityList.Visible = true;
+            View.SetNeedsDraw();
+        }
+        catch (Exception ex)
+        {
+            _loadingView.Text = $"Error: {ex.Message}";
+        }
     }
 
-    public void OnActivated()
+    private async Task OnEntitySelected()
     {
-        // Not implemented for this example, but you could add logic here to refresh data or set up the view when it's activated.
-    }
-
-    public void OnDeactivated()
-    {
-        // Not implemented for this example, but you could add logic here to clean up resources or save state when the view is deactivated.
+        if (_entityList is null || _loadingView is null)
+            return;
+        int? selectedIndex = _entityList.SelectedItem;
+        if (selectedIndex is null or < 0)
+            return;
+        var entityName = _entityList.Source.ToList()[selectedIndex.Value] as string;
+        if (string.IsNullOrEmpty(entityName))
+            return;
+        var entityMetadata = await _drfTool.GetEntityMetadataAsync(entityName);
     }
 }

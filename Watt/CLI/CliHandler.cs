@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Watt.Core.Authentication;
+using Spectre.Console;
 
 namespace Watt.CLI;
 
@@ -29,7 +30,7 @@ internal static class CliHandler
     {
         if (subArgs.Length == 0)
         {
-            Console.Error.WriteLine("Usage: watt env <add|list|remove>");
+            Console.Error.WriteLine("Usage: watt env <add|list|select|remove>");
             return 1;
         }
 
@@ -38,6 +39,7 @@ internal static class CliHandler
             "add"    => await HandleEnvAddAsync(subArgs[1..], authService),
             "list"   => HandleEnvList(authService),
             "remove" => await HandleEnvRemoveAsync(subArgs[1..], authService),
+            "select" => await HandleEnvSelectAsync(subArgs[1..], authService),
             _        => HandleUnknown(subArgs[0])
         };
     }
@@ -63,6 +65,7 @@ internal static class CliHandler
         {
             Id     = Guid.NewGuid().ToString(),
             Name   = name,
+            IsActive = false,
             OrgUrl = url
         };
 
@@ -75,6 +78,13 @@ internal static class CliHandler
     {
         var environments = authService.GetAllEnvironments().ToList();
 
+        var table = new Table();
+        table.AddColumn("#");
+        table.AddColumn("Active");
+        table.AddColumn("Name");
+        table.AddColumn("URL");
+        table.AddColumn("ID");
+
         if (environments.Count == 0)
         {
             Console.WriteLine("No environments registered. Use 'watt env add <name> <url>' to add one.");
@@ -82,8 +92,41 @@ internal static class CliHandler
         }
 
         foreach (var env in environments)
-            Console.WriteLine($"{env.Name,-30} {env.OrgUrl,-60} {env.Id}");
+        {
+            table.AddRow(
+                (table.Rows.Count + 1).ToString(),
+                env.IsActive ? "[green]Yes[/]" : "No",
+                env.Name,
+                env.OrgUrl,
+                env.Id);
+        }
 
+        AnsiConsole.Write(table);
+        return 0;
+    }
+
+    private static async Task<int> HandleEnvSelectAsync(string[] args, AuthenticationService authService)
+    {
+        if (args.Length < 1)
+        {
+            Console.Error.WriteLine("Usage: watt env select <name|id>");
+            return 1;
+        }
+
+        var nameOrId     = args[0];
+        var environments = authService.GetAllEnvironments().ToList();
+        var env = environments.FirstOrDefault(e =>
+            e.Id.Equals(nameOrId,   StringComparison.OrdinalIgnoreCase) ||
+            e.Name.Equals(nameOrId, StringComparison.OrdinalIgnoreCase));
+
+        if (env == null)
+        {
+            Console.Error.WriteLine($"Environment '{nameOrId}' not found.");
+            return 1;
+        }
+
+        await authService.SetActiveEnvironmentAsync(env.Id);
+        Console.WriteLine($"Environment '{env.Name}' selected.");
         return 0;
     }
 
@@ -125,6 +168,7 @@ internal static class CliHandler
         Console.WriteLine("  (no args)                     Launch the TUI");
         Console.WriteLine("  env add <name> <url>          Register a Dataverse environment");
         Console.WriteLine("  env list                      List all registered environments");
+        Console.WriteLine("  env select <name|id>          Select an active environment");
         Console.WriteLine("  env remove <name|id>          Remove a registered environment");
     }
 }

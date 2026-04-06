@@ -1,13 +1,14 @@
 ﻿using System.Collections.ObjectModel;
 using Terminal.Gui.App;
 using Terminal.Gui.Drawing;
+using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Watt.CLI;
 using Watt.Core;
 using Watt.Core.Authentication;
-using Watt.UI.Connection;
 using Watt.UI.Tools;
+using Watt.UI;
 
 // --- CLI mode: handle env subcommands without launching the TUI ---
 if (args.Length > 0)
@@ -22,16 +23,23 @@ if (args.Length > 0)
 using var app = Application.Create().Init();
 
 // Initialize authentication services before Application.Init() installs
-// its SynchronizationContext, to avoid async/await deadlocks.
 var authService = new AuthenticationService();
 await authService.InitializeAsync();
+var activeEnvironment = authService.GetActiveEnvironment();
+if (activeEnvironment == null)
+{
+    MessageBox.ErrorQuery(app, "No active environment found", "Please use the CLI to set an active environment before launching the TUI.\nWith 'watt env add <environmentName> <orgUrl>' and 'watt env set <environmentName>'", "Close");
+    authService.DisposeAsync().AsTask().Wait();
+    return 1;
+}
 
 var connectionManager = new DataverseConnectionManager(authService);
 
 var appState = new AppState
 {
     AuthenticationService = authService,
-    ConnectionManager = connectionManager
+    ConnectionManager = connectionManager,
+    ServiceClient = await connectionManager.GetConnectionAsync(activeEnvironment.Id)
 };
 
 var tools = new List<IToolView>
@@ -40,7 +48,6 @@ var tools = new List<IToolView>
     new InspectorView(appState)
 };
 
-tools.Sort((x, y) => string.Compare(x.Name, y.Name, StringComparison.Ordinal));
 
 var win = new Window()
 {
@@ -51,57 +58,86 @@ var win = new Window()
     BorderStyle = LineStyle.None,
 };
 
+tools.Sort((x, y) => string.Compare(x.Name, y.Name, StringComparison.Ordinal));
 var toolNames = new ObservableCollection<string>(tools.ConvertAll(t => t.Name));
-var listView = new ListView
+
+var toolSelector = new ToolSelector(appState, toolNames)
 {
+    Title = "Select a Tool",
     X = 0,
     Y = 0,
-    Width = 25,
-    Height = Dim.Fill()
+    Width = 30,
+    Height = Dim.Fill(),
 };
-listView.SetSource<string>(toolNames);
-var topBar = new TopBarView(app, appState, authService, connectionManager);
 
-var listFrame = new FrameView()
+try
 {
-    Title = "Tools",
-    X = 0,
-    Y = Pos.Bottom(topBar),
-    Width = 25,
-    Height = Dim.Fill()
-};
-listFrame.Add(listView);
+    int selectedToolIndex = 0;
+    toolSelector.ToolSelected += index => selectedToolIndex = index;
+    app.Run(toolSelector);
+    appState.SelectedTool = tools[selectedToolIndex];
+}
+catch (Exception ex)
+{
+    MessageBox.ErrorQuery(app, "Error", $"An error occurred while running the application: {ex.Message}", "Close");
+    return 1;
+}
+
+var selectedTool = appState.SelectedTool ?? tools[0];
+selectedTool.View.X = 0;
+selectedTool.View.Y = 0;
+selectedTool.View.Width = Dim.Fill();
+selectedTool.View.Height = Dim.Fill();
+selectedTool.InitializeUi();
+win.Initialized += async (_, _) => await selectedTool.LoadAsync();
 
 var mainPanel = new FrameView()
 {
-    Title = "No Tool Selected",
-    X = Pos.Right(listFrame),
+    Title = $"Watt - {selectedTool.Name ?? "<Tool Name>"}",
+    X = 0,
     Y = 0,
     Width = Dim.Fill(),
-    Height = Dim.Fill()
+    Height = Dim.Fill() - 1,
 };
 
-listView.ValueChanged += async (s, args) =>
-{
-    if (appState.Connection is not { IsReady: true })
+mainPanel.Add(selectedTool.View);
+
+var statusBar = new StatusBar(
+[
+    new Shortcut(Key.Q.WithCtrl, "Quit", () => app.RequestStop()),
+
+    new Shortcut(Key.F1, "Help", () =>
     {
-        MessageBox.ErrorQuery(app, "No Connection", "Please connect to an environment first", "OK");
-        return;
-    }
+        MessageBox.Query(app, "Help", "Use Ctrl+Q to quit. Select a tool from the list to get started.", "Close");
+    }),
+    new Shortcut(Key.F5, "Refresh Connection", async () =>
+    {
+        var env = authService.GetActiveEnvironment();
+        if (env != null)
+        {
+            appState.ServiceClient = await connectionManager.GetConnectionAsync(env.Id);
+            MessageBox.Query(app, "Connection Refreshed", $"Connection for environment '{env.Name}' has been refreshed.", "Close");
+        }
+        else
+        {
+            MessageBox.ErrorQuery(app, "No Active Environment", "There is no active environment. Please set an active environment using the CLI.", "Close");
+        }
+    }),
+    new Shortcut(Key.F5.WithShift, $"Env: {authService.GetActiveEnvironment()?.Name ?? "None"}", () =>
+    {
+        var env = authService.GetActiveEnvironment();
+        if (env != null)
+        {
+            MessageBox.Query(app, "Current Environment", $"Name: {env.Name}\nURL: {env.OrgUrl}", "Close");
+        }
+        else
+        {
+            MessageBox.ErrorQuery(app, "No Active Environment", "There is no active environment. Please set an active environment using the CLI.", "Close");
+        }
+    })
+]);
 
-    if (args.NewValue is not { } index || index < 0 || index >= tools.Count)
-        return;
-
-    mainPanel.RemoveAll();
-    var selectedTool = tools[index];
-    selectedTool.OnActivated();
-    var view = selectedTool.CreateView(appState);
-    if (view is View v)
-        mainPanel.Add(v);
-    mainPanel.Title = selectedTool.Name;
-};
-
-win.Add(topBar, listFrame, mainPanel);
+win.Add(mainPanel, statusBar);
 
 try
 {
@@ -110,7 +146,6 @@ try
 }
 finally
 {
-    // Cleanup
     await connectionManager.DisposeAsync();
     await authService.DisposeAsync();
 }

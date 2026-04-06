@@ -43,8 +43,16 @@ public class AuthenticationService : IAsyncDisposable
         return await _provider.ValidateAsync(null, environment);
     }
 
+    public EnvironmentDetails? GetActiveEnvironment() =>
+        _credentialManager.GetActiveEnvironment();
+
     public EnvironmentDetails? GetEnvironment(string environmentId) =>
         _credentialManager.GetEnvironment(environmentId);
+    
+    public async Task SetActiveEnvironmentAsync(string environmentId)
+    {
+        await _credentialManager.SetActiveEnvironmentAsync(environmentId);
+    }
 
     public IEnumerable<EnvironmentDetails> GetAllEnvironments() =>
         _credentialManager.GetAllEnvironments();
