@@ -15,13 +15,18 @@ internal class DrfView : IToolView
 
     private TextView? _loadingView;
     private ListView? _entityList;
-    private ListView? _attributeList;
 
     public DrfView(AppState appState)
     {
         AppState = appState;
         _drfTool = new DrfTool(appState);
-        View = new View();
+        View = new View()
+        {
+            X = 0,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill() - 1,
+        };
     }
 
     public void InitializeUi()
@@ -30,7 +35,7 @@ internal class DrfView : IToolView
         {
             X = 1,
             Y = 1,
-            Width = Dim.Fill(2),
+            Width = 30,
             Text = "Search entities..."
         };
 

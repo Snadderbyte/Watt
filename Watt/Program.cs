@@ -20,6 +20,7 @@ if (args.Length > 0)
     return exitCode;
 }
 
+// --- TUI mode: launch the GUI ---
 using var app = Application.Create().Init();
 
 // Initialize authentication services before Application.Init() installs
@@ -91,17 +92,6 @@ selectedTool.View.Height = Dim.Fill();
 selectedTool.InitializeUi();
 win.Initialized += async (_, _) => await selectedTool.LoadAsync();
 
-var mainPanel = new FrameView()
-{
-    Title = $"Watt - {selectedTool.Name ?? "<Tool Name>"}",
-    X = 0,
-    Y = 0,
-    Width = Dim.Fill(),
-    Height = Dim.Fill() - 1,
-};
-
-mainPanel.Add(selectedTool.View);
-
 var statusBar = new StatusBar(
 [
     new Shortcut(Key.Q.WithCtrl, "Quit", () => app.RequestStop()),
@@ -137,7 +127,7 @@ var statusBar = new StatusBar(
     })
 ]);
 
-win.Add(mainPanel, statusBar);
+win.Add(selectedTool.View, statusBar);
 
 try
 {
