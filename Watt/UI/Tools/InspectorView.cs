@@ -9,6 +9,7 @@ internal class InspectorView : IToolView
     public string Name { get; } = "Inspector";
     public AppState AppState { get; set; }
     public View View { get; set; }
+    public HelpDialog HelpDialog { get; set; } = new HelpDialog();
 
     public InspectorView(AppState appState)
     {
@@ -36,4 +37,6 @@ internal class InspectorView : IToolView
     }
 
     public Task LoadAsync() => Task.CompletedTask;
+
+    public Task RefreshAsync() => Task.CompletedTask;
 }

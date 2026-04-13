@@ -90,7 +90,36 @@ selectedTool.View.Y = 0;
 selectedTool.View.Width = Dim.Fill();
 selectedTool.View.Height = Dim.Fill();
 selectedTool.InitializeUi();
-win.Initialized += async (_, _) => await selectedTool.LoadAsync();
+
+// Show a loading spinner while the tool's data loads
+var loadingWindow = new Window
+{
+    Title = "Please Wait",
+    X = Pos.Center(),
+    Y = Pos.Center(),
+    Width = 30,
+    Height = 5,
+};
+var spinner = new SpinnerView
+{
+    X = Pos.Center(),
+    Y = 1,
+    AutoSpin = true,
+};
+var loadingLabel = new Label
+{
+    Text = $"Loading {selectedTool.Name}...",
+    X = Pos.Center(),
+    Y = 2,
+};
+loadingWindow.Add(spinner, loadingLabel);
+loadingWindow.Initialized += async (_, _) =>
+{
+    await selectedTool.LoadAsync();
+    app.Invoke(() => loadingWindow.RequestStop());
+};
+app.Run(loadingWindow);
+loadingWindow.Dispose();
 
 var statusBar = new StatusBar(
 [
@@ -128,7 +157,6 @@ var statusBar = new StatusBar(
 ]);
 
 win.Add(selectedTool.View, statusBar);
-
 try
 {
     app.Run(win);

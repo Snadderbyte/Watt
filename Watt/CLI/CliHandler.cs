@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Watt.Core.Authentication;
 using Spectre.Console;
+using Watt.Core;
 
 namespace Watt.CLI;
 
@@ -16,14 +17,36 @@ internal static class CliHandler
 {
     internal static async Task<int> RunAsync(string[] args, AuthenticationService authService)
     {
-        if (args.Length == 0 || args[0] != "env")
+        if (args.Length == 0)
         {
-            Console.Error.WriteLine($"Unknown command: {args[0]}");
             PrintUsage();
             return 1;
         }
 
-        return await HandleEnvCommandAsync(args[1..], authService);
+        if (args[0] == "env")
+            return await HandleEnvCommandAsync(args[1..], authService);
+
+        if (args[0] == "tool")
+            return await HandleToolCommandAsync(args[1..], null!); // Pass necessary services
+
+        Console.Error.WriteLine($"Unknown command: {args[0]}");
+        PrintUsage();
+        return 1;
+    }
+
+    private static async Task<int> HandleToolCommandAsync(string[] subArgs, AppState appState)
+    {
+        if (subArgs.Length == 0)
+        {
+            Console.Error.WriteLine("Usage: watt tool <toolName> [options]");
+            return 1;
+        }
+
+        return subArgs[0] switch
+        {
+            "drf" => await HandleToolSelectionAsync(subArgs[1..], appState),
+            _ => HandleToolUnknown(subArgs[0])
+        };
     }
 
     private static async Task<int> HandleEnvCommandAsync(string[] subArgs, AuthenticationService authService)
@@ -36,13 +59,34 @@ internal static class CliHandler
 
         return subArgs[0] switch
         {
-            "add"    => await HandleEnvAddAsync(subArgs[1..], authService),
-            "list"   => HandleEnvList(authService),
+            "add" => await HandleEnvAddAsync(subArgs[1..], authService),
+            "list" => HandleEnvList(authService),
             "remove" => await HandleEnvRemoveAsync(subArgs[1..], authService),
             "select" => await HandleEnvSelectAsync(subArgs[1..], authService),
-            _        => HandleUnknown(subArgs[0])
+            _ => HandleEnvUnknown(subArgs[0])
         };
     }
+
+    private static async Task<int> HandleToolSelectionAsync(string[] subArgs, AppState appState)
+    {
+        if (subArgs.Length == 0)
+        {
+            Console.Error.WriteLine("Usage: watt tool <toolName> [options]");
+            return 1;
+        }
+
+        var toolName = subArgs[0].ToLower();
+        switch (toolName)
+        {
+            case "drf":
+                Console.WriteLine("Launching Duplicate Row Finder...");
+                return 0;
+            default:
+                Console.Error.WriteLine($"Unknown tool: {toolName}");
+                return 1;
+        }
+    }
+
 
     private static async Task<int> HandleEnvAddAsync(string[] args, AuthenticationService authService)
     {
@@ -53,7 +97,7 @@ internal static class CliHandler
         }
 
         var name = args[0];
-        var url  = args[1];
+        var url = args[1];
 
         if (!url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
@@ -63,8 +107,8 @@ internal static class CliHandler
 
         var environment = new EnvironmentDetails
         {
-            Id     = Guid.NewGuid().ToString(),
-            Name   = name,
+            Id = Guid.NewGuid().ToString(),
+            Name = name,
             IsActive = false,
             OrgUrl = url
         };
@@ -113,10 +157,10 @@ internal static class CliHandler
             return 1;
         }
 
-        var nameOrId     = args[0];
+        var nameOrId = args[0];
         var environments = authService.GetAllEnvironments().ToList();
         var env = environments.FirstOrDefault(e =>
-            e.Id.Equals(nameOrId,   StringComparison.OrdinalIgnoreCase) ||
+            e.Id.Equals(nameOrId, StringComparison.OrdinalIgnoreCase) ||
             e.Name.Equals(nameOrId, StringComparison.OrdinalIgnoreCase));
 
         if (env == null)
@@ -138,10 +182,10 @@ internal static class CliHandler
             return 1;
         }
 
-        var nameOrId     = args[0];
+        var nameOrId = args[0];
         var environments = authService.GetAllEnvironments().ToList();
         var env = environments.FirstOrDefault(e =>
-            e.Id.Equals(nameOrId,   StringComparison.OrdinalIgnoreCase) ||
+            e.Id.Equals(nameOrId, StringComparison.OrdinalIgnoreCase) ||
             e.Name.Equals(nameOrId, StringComparison.OrdinalIgnoreCase));
 
         if (env == null)
@@ -155,10 +199,17 @@ internal static class CliHandler
         return 0;
     }
 
-    private static int HandleUnknown(string subcommand)
+    private static int HandleEnvUnknown(string subcommand)
     {
         Console.Error.WriteLine($"Unknown subcommand: {subcommand}");
-        PrintUsage();
+        PrintEnvUsage();
+        return 1;
+    }
+
+    private static int HandleToolUnknown(string subcommand)
+    {
+        Console.Error.WriteLine($"Unknown subcommand: {subcommand}");
+        PrintToolUsage();
         return 1;
     }
 
@@ -166,9 +217,20 @@ internal static class CliHandler
     {
         Console.WriteLine("Usage: watt [command]");
         Console.WriteLine("  (no args)                     Launch the TUI");
-        Console.WriteLine("  env add <name> <url>          Register a Dataverse environment");
-        Console.WriteLine("  env list                      List all registered environments");
-        Console.WriteLine("  env select <name|id>          Select an active environment");
-        Console.WriteLine("  env remove <name|id>          Remove a registered environment");
+        Console.WriteLine("  env                           Manage environments");
+        Console.WriteLine("  tool                          Select and run a tool");
+    }
+
+    private static void PrintEnvUsage()
+    {
+        Console.WriteLine("Usage: watt env <subcommand>");
+        Console.WriteLine("  add <name> <url>              Add a new environment");
+        Console.WriteLine("  list                          List all environments");
+        Console.WriteLine("  select <name|id>              Select an active environment");
+        Console.WriteLine("  remove <name|id>              Remove an environment");
+    }
+
+    private static void PrintToolUsage()
+    {
     }
 }
