@@ -127,7 +127,7 @@ var statusBar = new StatusBar(
 
     new Shortcut(Key.F1, "Help", () =>
     {
-        MessageBox.Query(app, "Help", "Use Ctrl+Q to quit. Select a tool from the list to get started.", "Close");
+        app.Run(selectedTool.HelpDialog);
     }),
     new Shortcut(Key.F5, "Refresh Connection", async () =>
     {

@@ -140,6 +140,10 @@ internal class DrfView : IToolView
         _entityFrame.Initialized += (s, e) => InitializeEntityList();
         View.Add(_entityFrame, _attributeFrame, _selectedAttributesFrame, _resultFrame);
     }
+    public void InitializeHeplDialog()
+    {
+        
+    }
 
     public async Task LoadAsync()
     {
@@ -250,15 +254,15 @@ internal class DrfView : IToolView
         {
             { "Logical Name", a => a.LogicalName },
             { "Display Name", a => a.DisplayName?.UserLocalizedLabel?.Label ?? "" },
-            { "Type", a => a.AttributeType },
+            { "Type", a => a.AttributeType?.ToString() ?? "unknown" },
         };
         _attributeTable.Table = new EnumerableTableSource<AttributeMetadata>(attributes, columnDefinitions);
 
-        _attributeTable.CellActivated += (s, e) =>
+        _attributeTable.CellActivated += (s, entity) =>
         {
-            if (e.Row >= 0 && e.Row < attributes.Count)
+            if (entity.Row >= 0 && entity.Row < attributes.Count)
             {
-                var selectedAttribute = attributes[e.Row];
+                var selectedAttribute = attributes[entity.Row];
                 AddSelectedAttribute(selectedAttribute.LogicalName);
             }
         };
@@ -286,7 +290,7 @@ internal class DrfView : IToolView
         foreach (var attr in group.AttributeValues.Keys)
         {
             var captured = attr;
-            columnDefinitions[captured] = e => e.Contains(captured) ? e[captured]?.ToString() ?? "" : "";
+            columnDefinitions[captured] = entity => entity.Contains(captured) ? entity[captured]?.ToString() ?? "" : "";
         }
         _resultTableExpanded!.Table = new EnumerableTableSource<Entity>(group.Records, columnDefinitions);
     }

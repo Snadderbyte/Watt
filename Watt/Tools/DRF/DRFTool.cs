@@ -81,15 +81,15 @@ internal class DrfTool
         } while (result.MoreRecords);
 
         return [.. allRecords
-            .GroupBy(e => string.Join("|", attributeLogicalNames.Select(a =>
-                e.Contains(a) ? e[a]?.ToString() ?? "" : "")))
-            .Where(g => g.Count() > 1)
-            .Select(g => new DuplicateGroup
+            .GroupBy(entity => string.Join("|", attributeLogicalNames.Select(attribute =>
+                entity.Contains(attribute) ? entity[attribute]?.ToString() ?? "" : "")))
+            .Where(group => group.Count() > 1)
+            .Select(group => new DuplicateGroup
             {
                 AttributeValues = attributeLogicalNames.ToDictionary(
-                    a => a,
-                    a => g.First().Contains(a) ? g.First()[a]?.ToString() ?? "" : ""),
-                Records = [.. g],
+                    attribute => attribute,
+                    attribute => group.First().Contains(attribute) ? group.First()[attribute]?.ToString() ?? "" : ""),
+                Records = [.. group],
             })];
     }
 
