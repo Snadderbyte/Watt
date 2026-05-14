@@ -82,16 +82,25 @@ internal class DrfTool
 
         return [.. allRecords
             .GroupBy(entity => string.Join("|", attributeLogicalNames.Select(attribute =>
-                entity.Contains(attribute) ? entity[attribute]?.ToString() ?? "" : "")))
+                entity.Contains(attribute) ? GetAttributeStringValue(entity[attribute]) : "")))
             .Where(group => group.Count() > 1)
             .Select(group => new DuplicateGroup
             {
                 AttributeValues = attributeLogicalNames.ToDictionary(
                     attribute => attribute,
-                    attribute => group.First().Contains(attribute) ? group.First()[attribute]?.ToString() ?? "" : ""),
+                    attribute => group.First().Contains(attribute) ? GetAttributeStringValue(group.First()[attribute]) : ""),
                 Records = [.. group],
             })];
     }
+
+    public static string GetAttributeStringValue(object? value) => value switch
+    {
+        OptionSetValue osv => osv.Value.ToString(),
+        OptionSetValueCollection osvc => string.Join(", ", osvc.Select(o => o.Value)),
+        EntityReference er => er.Name ?? er.Id.ToString(),
+        Money money => money.Value.ToString(),
+        _ => value?.ToString() ?? "",
+    };
 
     public class DuplicateGroup
     {

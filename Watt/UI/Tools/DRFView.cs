@@ -1,4 +1,6 @@
 ﻿using Watt.Core;
+using Terminal.Gui.App;
+using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Watt.Tools.DRF;
@@ -139,6 +141,23 @@ internal class DrfView : IToolView
 
         _entityFrame.Initialized += (s, e) => InitializeEntityList();
         View.Add(_entityFrame, _attributeFrame, _selectedAttributesFrame, _resultFrame);
+
+        foreach (var frame in new[] { _entityFrame, _attributeFrame, _selectedAttributesFrame, _resultFrame })
+        {
+            frame.KeyDown += (s, e) =>
+            {
+                if (e == Key.Tab)
+                {
+                    (s as View)?.App?.Navigation?.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabGroup);
+                    e.Handled = true;
+                }
+                else if (e == Key.Tab.WithShift)
+                {
+                    (s as View)?.App?.Navigation?.AdvanceFocus(NavigationDirection.Backward, TabBehavior.TabGroup);
+                    e.Handled = true;
+                }
+            };
+        }
     }
     public void InitializeHeplDialog()
     {
@@ -236,6 +255,13 @@ internal class DrfView : IToolView
     }
     public void InitializeAttributeList(List<AttributeMetadata> attributes)
     {
+        if (_attributeTable != null)
+        {
+            _attributeTable.Visible = false;
+            _attributeFrame?.Remove(_attributeTable);
+            _attributeTable.Dispose();
+            _attributeTable = null;
+        }
         var searchBar = new TextField
         {
             X = 0,
@@ -290,7 +316,7 @@ internal class DrfView : IToolView
         foreach (var attr in group.AttributeValues.Keys)
         {
             var captured = attr;
-            columnDefinitions[captured] = entity => entity.Contains(captured) ? entity[captured]?.ToString() ?? "" : "";
+            columnDefinitions[captured] = entity => entity.Contains(captured) ? DrfTool.GetAttributeStringValue(entity[captured]) : "";
         }
         _resultTableExpanded!.Table = new EnumerableTableSource<Entity>(group.Records, columnDefinitions);
     }
