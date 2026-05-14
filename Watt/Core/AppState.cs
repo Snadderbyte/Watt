@@ -1,7 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using Microsoft.PowerPlatform.Dataverse.Client;
+﻿using Microsoft.PowerPlatform.Dataverse.Client;
+using Terminal.Gui.ViewBase;
 using Watt.Core.Authentication;
+using Watt.UI.Tools;
 
 namespace Watt.Core;
 
@@ -10,15 +10,11 @@ namespace Watt.Core;
 /// </summary>
 public class AppState
 {
-    /// <summary>
-    /// The currently selected environment ID.
-    /// </summary>
-    public string? CurrentEnvironmentId { get; set; }
 
     /// <summary>
     /// The current active Dataverse connection.
     /// </summary>
-    public ServiceClient? Connection { get; set; }
+    public ServiceClient? ServiceClient { get; set; }
 
     /// <summary>
     /// Authentication service for managing credentials and environments.
@@ -31,26 +27,7 @@ public class AppState
     public required DataverseConnectionManager ConnectionManager { get; set; }
 
     /// <summary>
-    /// Switches to a different environment and establishes a connection.
+    /// The currently selected tool view in the UI. This can be used to track which tool is active and manage state accordingly.
     /// </summary>
-    public async System.Threading.Tasks.Task<bool> SwitchEnvironmentAsync(string environmentId)
-    {
-        var environment = AuthenticationService.GetEnvironment(environmentId);
-        if (environment == null)
-            return false;
-
-        // Validate credentials exist and are valid
-        var isValid = await AuthenticationService.ValidateCredentialsAsync(environmentId);
-        if (!isValid)
-            return false;
-
-        // Get or create connection
-        var connection = await ConnectionManager.GetConnectionAsync(environmentId);
-        if (connection == null)
-            return false;
-
-        CurrentEnvironmentId = environmentId;
-        Connection = connection;
-        return true;
-    }
+    public IToolView? SelectedTool { get; set; }
 }

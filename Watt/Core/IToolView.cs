@@ -1,32 +1,33 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using Terminal.Gui;
+using Terminal.Gui.ViewBase;
+using Terminal.Gui.Views;
 
 namespace Watt.Core;
 
-internal interface IToolView
+public interface IToolView
 {
-    string Id { get; }
+    public View View { get; set; }
+    /// <summary>
+    /// The title of the view, used for display in the UI.
+    /// </summary>
     string Name { get; }
 
     /// <summary>
-    /// Creates a new view representation based on the specified application state.
+    /// 
     /// </summary>
-    /// <param name="state">The current state of the application used to generate the view. Cannot be null.</param>
-    /// <returns>A new instance of the view that reflects the provided application state.</returns>
-    View CreateView(AppState state);
+    public HelpDialog HelpDialog { get; set; }
+
     /// <summary>
-    /// Handles logic that should occur when the component or application is activated.
+    /// Initializes the UI components of the view. This is called when the view is first created.
     /// </summary>
-    /// <remarks>Override this method to implement custom activation behavior, such as refreshing data or
-    /// updating state when the component becomes active. The specific actions performed depend on the context in which
-    /// the method is used.</remarks>
-    void OnActivated();
+    void InitializeUi();
+
     /// <summary>
-    /// Handles logic to be executed when the component is deactivated.
+    /// Loads any necessary data or state for the view. This can be called when the view is selected or needs to refresh its content.
     /// </summary>
-    /// <remarks>Override this method to perform cleanup or state updates when the component is no longer
-    /// active. This method is typically called as part of a component's lifecycle management.</remarks>
-    void OnDeactivated();
+    Task LoadAsync();
+    /// <summary>
+    /// Refreshes the view's content. This can be called when the view is selected or needs to update its display based on changes in the underlying data or state.
+    /// </summary>
+    /// <returns></returns>
+    Task RefreshAsync();
 }

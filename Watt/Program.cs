@@ -1,123 +1,171 @@
-﻿using Terminal.Gui;
+﻿using System.Collections.ObjectModel;
+using Terminal.Gui.App;
+using Terminal.Gui.Drawing;
+using Terminal.Gui.Input;
+using Terminal.Gui.ViewBase;
+using Terminal.Gui.Views;
+using Watt.CLI;
 using Watt.Core;
 using Watt.Core.Authentication;
+using Watt.UI.Tools;
 using Watt.UI;
-using Watt.UI.DRF;
 
-class Program
+// --- CLI mode: handle env subcommands without launching the TUI ---
+if (args.Length > 0)
 {
-    static async Task Main(string[] args)
-    {
-        Application.Init();
-
-        // Initialize authentication services
-        var authService = new AuthenticationService();
-        await authService.InitializeAsync();
-
-        var connectionManager = new DataverseConnectionManager(authService);
-
-        var appState = new AppState
-        {
-            AuthenticationService = authService,
-            ConnectionManager = connectionManager
-        };
-
-        var tools = new List<IToolView>
-        {
-            new DRFView(),
-        };
-
-        tools.Sort((x, y) => string.Compare(x.Name, y.Name, StringComparison.Ordinal));
-
-        var win = new Window("Watt")
-        {
-            X = 0,
-            Y = 0,
-            Width = Dim.Fill(),
-            Height = Dim.Fill()
-        };
-
-        // Create environment selector button in top area
-        var environmentStatusLabel = new Label("No environment selected")
-        {
-            X = 1,
-            Y = 0,
-            Width = 50
-        };
-
-        var selectEnvironmentButton = new Button("Select Environment")
-        {
-            X = Pos.Right(environmentStatusLabel),
-            Y = 0
-        };
-        selectEnvironmentButton.Clicked += () =>
-        {
-            var envDialog = new EnvironmentSelectorDialog(authService, connectionManager);
-            Application.Run(envDialog);
-
-            // Update status
-            if (!string.IsNullOrEmpty(appState.CurrentEnvironmentId))
-            {
-                var env = authService.GetEnvironment(appState.CurrentEnvironmentId);
-                if (env != null)
-                    environmentStatusLabel.Text = $"Connected: {env.Name}";
-            }
-        };
-
-        var topBar = new FrameView("Connection")
-        {
-            X = 0,
-            Y = 0,
-            Width = Dim.Fill(),
-            Height = 3
-        };
-        topBar.Add(environmentStatusLabel, selectEnvironmentButton);
-
-        var toolNames = tools.ConvertAll(t => t.Name);
-        var listView = new ListView(toolNames)
-        {
-            X = 0,
-            Y = Pos.Bottom(topBar),
-            Width = 25,
-            Height = Dim.Fill()
-        };
-
-        var mainPanel = new FrameView("Tool View")
-        {
-            X = Pos.Right(listView),
-            Y = Pos.Bottom(topBar),
-            Width = Dim.Fill(),
-            Height = Dim.Fill()
-        };
-
-        listView.SelectedItemChanged += args =>
-        {
-            if (appState.Connection == null || !appState.Connection.IsReady)
-            {
-                MessageBox.ErrorQuery("No Connection", "Please connect to an environment first", "OK");
-                return;
-            }
-
-            mainPanel.RemoveAll();
-            var selectedTool = tools[args.Item];
-            selectedTool.OnActivated();
-            var view = selectedTool.CreateView(appState);
-            if (view is View v)
-                mainPanel.Add(v);
-        };
-
-        win.Add(topBar, listView, mainPanel);
-        Application.Top.Add(win);
-
-        try
-        {
-            Application.Run();
-        }
-        finally
-        {
-            // Cleanup
-            await connectionManager.DisposeAsync();
-            await authService.DisposeAsync();
-        }
-    }
+    var cliAuthService = new AuthenticationService();
+    await cliAuthService.InitializeAsync();
+    var exitCode = await CliHandler.RunAsync(args, cliAuthService);
+    await cliAuthService.DisposeAsync();
+    return exitCode;
 }
+
+// --- TUI mode: launch the GUI ---
+using var app = Application.Create().Init();
+
+// Initialize authentication services before Application.Init() installs
+var authService = new AuthenticationService();
+await authService.InitializeAsync();
+var activeEnvironment = authService.GetActiveEnvironment();
+if (activeEnvironment == null)
+{
+    MessageBox.ErrorQuery(app, "No active environment found", "Please use the CLI to set an active environment before launching the TUI.\nWith 'watt env add <environmentName> <orgUrl>' and 'watt env set <environmentName>'", "Close");
+    authService.DisposeAsync().AsTask().Wait();
+    return 1;
+}
+
+var connectionManager = new DataverseConnectionManager(authService);
+
+var appState = new AppState
+{
+    AuthenticationService = authService,
+    ConnectionManager = connectionManager,
+    ServiceClient = await connectionManager.GetConnectionAsync(activeEnvironment.Id)
+};
+
+var tools = new List<IToolView>
+{
+    new DrfView(appState),
+    new InspectorView(appState)
+};
+
+
+var win = new Window()
+{
+    X = 0,
+    Y = 0,
+    Width = Dim.Fill(),
+    Height = Dim.Fill(),
+    BorderStyle = LineStyle.None,
+};
+
+tools.Sort((x, y) => string.Compare(x.Name, y.Name, StringComparison.Ordinal));
+var toolNames = new ObservableCollection<string>(tools.ConvertAll(t => t.Name));
+
+var toolSelector = new ToolSelector(appState, toolNames)
+{
+    Title = "Select a Tool",
+    X = 0,
+    Y = 0,
+    Width = 30,
+    Height = Dim.Fill(),
+};
+
+try
+{
+    int selectedToolIndex = 0;
+    toolSelector.ToolSelected += index => selectedToolIndex = index;
+    app.Run(toolSelector);
+    appState.SelectedTool = tools[selectedToolIndex];
+}
+catch (Exception ex)
+{
+    MessageBox.ErrorQuery(app, "Error", $"An error occurred while running the application: {ex.Message}", "Close");
+    return 1;
+}
+
+var selectedTool = appState.SelectedTool ?? tools[0];
+selectedTool.View.X = 0;
+selectedTool.View.Y = 0;
+selectedTool.View.Width = Dim.Fill();
+selectedTool.View.Height = Dim.Fill();
+selectedTool.InitializeUi();
+
+// Show a loading spinner while the tool's data loads
+var loadingWindow = new Window
+{
+    Title = "Please Wait",
+    X = Pos.Center(),
+    Y = Pos.Center(),
+    Width = 30,
+    Height = 5,
+};
+var spinner = new SpinnerView
+{
+    X = Pos.Center(),
+    Y = 1,
+    AutoSpin = true,
+};
+var loadingLabel = new Label
+{
+    Text = $"Loading {selectedTool.Name}...",
+    X = Pos.Center(),
+    Y = 2,
+};
+loadingWindow.Add(spinner, loadingLabel);
+loadingWindow.Initialized += async (_, _) =>
+{
+    await selectedTool.LoadAsync();
+    app.Invoke(() => loadingWindow.RequestStop());
+};
+app.Run(loadingWindow);
+loadingWindow.Dispose();
+
+var statusBar = new StatusBar(
+[
+    new Shortcut(Key.Q.WithCtrl, "Quit", () => app.RequestStop()),
+
+    new Shortcut(Key.F1, "Help", () =>
+    {
+        app.Run(selectedTool.HelpDialog);
+    }),
+    new Shortcut(Key.F5, "Refresh Connection", async () =>
+    {
+        var env = authService.GetActiveEnvironment();
+        if (env != null)
+        {
+            appState.ServiceClient = await connectionManager.GetConnectionAsync(env.Id);
+            MessageBox.Query(app, "Connection Refreshed", $"Connection for environment '{env.Name}' has been refreshed.", "Close");
+        }
+        else
+        {
+            MessageBox.ErrorQuery(app, "No Active Environment", "There is no active environment. Please set an active environment using the CLI.", "Close");
+        }
+    }),
+    new Shortcut(Key.F5.WithShift, $"Env: {authService.GetActiveEnvironment()?.Name ?? "None"}", () =>
+    {
+        var env = authService.GetActiveEnvironment();
+        if (env != null)
+        {
+            MessageBox.Query(app, "Current Environment", $"Name: {env.Name}\nURL: {env.OrgUrl}", "Close");
+        }
+        else
+        {
+            MessageBox.ErrorQuery(app, "No Active Environment", "There is no active environment. Please set an active environment using the CLI.", "Close");
+        }
+    })
+]);
+
+win.Add(selectedTool.View, statusBar);
+try
+{
+    app.Run(win);
+    win.Dispose();
+}
+finally
+{
+    await connectionManager.DisposeAsync();
+    await authService.DisposeAsync();
+}
+
+return 0;
