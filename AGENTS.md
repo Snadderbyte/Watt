@@ -28,7 +28,7 @@ Watt/
 - **CLI vs TUI split**: `Program.cs` checks `args.Length > 0` to decide mode. CLI commands must be fully self-contained and exit with an integer code; they must not touch Terminal.Gui types.
 - **Tool separation**: Business logic lives in `Tools/<ToolName>/`, UI lives in `UI/Tools/`. A `*View` class implements `IToolView` and holds a reference to its corresponding tool class. Keep them decoupled.
 - **AppState**: The single source of truth passed top-down. Do not use statics or singletons outside of `AppState`. Add new shared services as required properties on `AppState`.
-- **Authentication**: All credential acquisition goes through `AuthenticationService`, which delegates to `AzureCliAuthenticationProvider`. Watt never stores secrets — environment metadata (name, org URL, ID) is stored, tokens are always fetched live from the Azure CLI.
+- **Authentication**: `CredentialManager` stores only environment metadata (name, org URL, ID, active flag), and `DataverseConnectionManager` acquires tokens on demand through `AzureCliCredential`. Watt never stores secrets or tokens.
 
 ## Adding a new tool
 

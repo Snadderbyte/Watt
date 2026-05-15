@@ -15,7 +15,7 @@ namespace Watt.CLI;
 /// </summary>
 internal static class CliHandler
 {
-    internal static async Task<int> RunAsync(string[] args, AuthenticationService authService)
+    internal static async Task<int> RunAsync(string[] args, CredentialManager credentialManager)
     {
         if (args.Length == 0)
         {
@@ -24,7 +24,7 @@ internal static class CliHandler
         }
 
         if (args[0] == "env")
-            return await HandleEnvCommandAsync(args[1..], authService);
+            return await HandleEnvCommandAsync(args[1..], credentialManager);
 
         if (args[0] == "tool")
             return await HandleToolCommandAsync(args[1..], null!); // Pass necessary services
@@ -49,7 +49,7 @@ internal static class CliHandler
         };
     }
 
-    private static async Task<int> HandleEnvCommandAsync(string[] subArgs, AuthenticationService authService)
+    private static async Task<int> HandleEnvCommandAsync(string[] subArgs, CredentialManager credentialManager)
     {
         if (subArgs.Length == 0)
         {
@@ -59,10 +59,10 @@ internal static class CliHandler
 
         return subArgs[0] switch
         {
-            "add" => await HandleEnvAddAsync(subArgs[1..], authService),
-            "list" => HandleEnvList(authService),
-            "remove" => await HandleEnvRemoveAsync(subArgs[1..], authService),
-            "select" => await HandleEnvSelectAsync(subArgs[1..], authService),
+            "add" => await HandleEnvAddAsync(subArgs[1..], credentialManager),
+            "list" => HandleEnvList(credentialManager),
+            "remove" => await HandleEnvRemoveAsync(subArgs[1..], credentialManager),
+            "select" => await HandleEnvSelectAsync(subArgs[1..], credentialManager),
             _ => HandleEnvUnknown(subArgs[0])
         };
     }
@@ -87,8 +87,7 @@ internal static class CliHandler
         }
     }
 
-
-    private static async Task<int> HandleEnvAddAsync(string[] args, AuthenticationService authService)
+    private static async Task<int> HandleEnvAddAsync(string[] args, CredentialManager credentialManager)
     {
         if (args.Length < 2)
         {
@@ -113,14 +112,13 @@ internal static class CliHandler
             OrgUrl = url
         };
 
-        await authService.RegisterEnvironmentAsync(environment);
+        await credentialManager.SaveEnvironmentAsync(environment);
         Console.WriteLine($"Environment '{name}' added ({url})");
         return 0;
     }
-
-    private static int HandleEnvList(AuthenticationService authService)
+    private static int HandleEnvList(CredentialManager credentialManager)
     {
-        var environments = authService.GetAllEnvironments().ToList();
+        var environments = credentialManager.GetAllEnvironments().ToList();
 
         var table = new Table();
         table.AddColumn("#");
@@ -149,7 +147,7 @@ internal static class CliHandler
         return 0;
     }
 
-    private static async Task<int> HandleEnvSelectAsync(string[] args, AuthenticationService authService)
+    private static async Task<int> HandleEnvSelectAsync(string[] args, CredentialManager credentialManager)
     {
         if (args.Length < 1)
         {
@@ -158,7 +156,7 @@ internal static class CliHandler
         }
 
         var nameOrId = args[0];
-        var environments = authService.GetAllEnvironments().ToList();
+        var environments = credentialManager.GetAllEnvironments().ToList();
         var env = environments.FirstOrDefault(e =>
             e.Id.Equals(nameOrId, StringComparison.OrdinalIgnoreCase) ||
             e.Name.Equals(nameOrId, StringComparison.OrdinalIgnoreCase));
@@ -169,12 +167,12 @@ internal static class CliHandler
             return 1;
         }
 
-        await authService.SetActiveEnvironmentAsync(env.Id);
+        await credentialManager.SetActiveEnvironmentAsync(env.Id);
         Console.WriteLine($"Environment '{env.Name}' selected.");
         return 0;
     }
 
-    private static async Task<int> HandleEnvRemoveAsync(string[] args, AuthenticationService authService)
+    private static async Task<int> HandleEnvRemoveAsync(string[] args, CredentialManager credentialManager)
     {
         if (args.Length < 1)
         {
@@ -183,7 +181,7 @@ internal static class CliHandler
         }
 
         var nameOrId = args[0];
-        var environments = authService.GetAllEnvironments().ToList();
+        var environments = credentialManager.GetAllEnvironments().ToList();
         var env = environments.FirstOrDefault(e =>
             e.Id.Equals(nameOrId, StringComparison.OrdinalIgnoreCase) ||
             e.Name.Equals(nameOrId, StringComparison.OrdinalIgnoreCase));
@@ -194,7 +192,7 @@ internal static class CliHandler
             return 1;
         }
 
-        await authService.DeleteEnvironmentAsync(env.Id);
+        await credentialManager.DeleteEnvironmentAsync(env.Id);
         Console.WriteLine($"Environment '{env.Name}' removed.");
         return 0;
     }

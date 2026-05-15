@@ -12,8 +12,9 @@ namespace Watt.Core.Authentication;
 /// Tokens are obtained on each connection call via the Azure CLI credential —
 /// no token caching or storage is done here.
 /// </summary>
-public class DataverseConnectionManager(AuthenticationService authService) : IAsyncDisposable
+public class DataverseConnectionManager(CredentialManager credentialManager) : IAsyncDisposable
 {
+    private readonly CredentialManager _credentialManager = credentialManager;
     private readonly Dictionary<string, ServiceClient> _connections = new(StringComparer.OrdinalIgnoreCase);
     private readonly AzureCliCredential _credential = new();
 
@@ -23,13 +24,13 @@ public class DataverseConnectionManager(AuthenticationService authService) : IAs
     /// </summary>
     public async Task<ServiceClient?> GetConnectionAsync(string environmentId)
     {
-        var environment = authService.GetEnvironment(environmentId);
+        var environment = _credentialManager.GetEnvironment(environmentId);
         if (environment == null)
             return null;
 
         try
         {
-            var scope = AzureCliAuthenticationProvider.BuildScope(environment.OrgUrl);
+            var scope = BuildScope(environment.OrgUrl);
             var client = new ServiceClient(
                 new Uri(environment.OrgUrl),
                 async _ =>
@@ -54,15 +55,6 @@ public class DataverseConnectionManager(AuthenticationService authService) : IAs
         }
     }
 
-    public void CloseConnection(string environmentId)
-    {
-        if (_connections.TryGetValue(environmentId, out var client))
-        {
-            try { client.Dispose(); } catch { }
-            _connections.Remove(environmentId);
-        }
-    }
-
     private void CloseAllConnections()
     {
         foreach (var client in _connections.Values)
@@ -76,4 +68,7 @@ public class DataverseConnectionManager(AuthenticationService authService) : IAs
         CloseAllConnections();
         await Task.CompletedTask;
     }
+
+    internal static string BuildScope(string orgUrl) =>
+    $"{orgUrl.TrimEnd('/')}/.default";
 }

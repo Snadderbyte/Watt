@@ -17,11 +17,6 @@ public class AppState
     public ServiceClient? ServiceClient { get; set; }
 
     /// <summary>
-    /// Authentication service for managing credentials and environments.
-    /// </summary>
-    public required AuthenticationService AuthenticationService { get; set; }
-
-    /// <summary>
     /// Connection manager for Dataverse.
     /// </summary>
     public required DataverseConnectionManager ConnectionManager { get; set; }

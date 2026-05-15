@@ -11,12 +11,13 @@ using Watt.UI.Tools;
 using Watt.UI;
 
 // --- CLI mode: handle env subcommands without launching the TUI ---
+var credentialManager = new CredentialManager();
+
 if (args.Length > 0)
 {
-    var cliAuthService = new AuthenticationService();
-    await cliAuthService.InitializeAsync();
-    var exitCode = await CliHandler.RunAsync(args, cliAuthService);
-    await cliAuthService.DisposeAsync();
+    await credentialManager.LoadStoredEnvironmentsAsync();
+    var exitCode = await CliHandler.RunAsync(args, credentialManager);
+    await credentialManager.DisposeAsync();
     return exitCode;
 }
 
@@ -24,21 +25,18 @@ if (args.Length > 0)
 using var app = Application.Create().Init();
 
 // Initialize authentication services before Application.Init() installs
-var authService = new AuthenticationService();
-await authService.InitializeAsync();
-var activeEnvironment = authService.GetActiveEnvironment();
+await credentialManager.LoadStoredEnvironmentsAsync();
+var activeEnvironment = credentialManager.GetActiveEnvironment();
 if (activeEnvironment == null)
 {
     MessageBox.ErrorQuery(app, "No active environment found", "Please use the CLI to set an active environment before launching the TUI.\nWith 'watt env add <environmentName> <orgUrl>' and 'watt env set <environmentName>'", "Close");
-    authService.DisposeAsync().AsTask().Wait();
+    await credentialManager.DisposeAsync();
     return 1;
+
 }
-
-var connectionManager = new DataverseConnectionManager(authService);
-
+var connectionManager = new DataverseConnectionManager(credentialManager);
 var appState = new AppState
 {
-    AuthenticationService = authService,
     ConnectionManager = connectionManager,
     ServiceClient = await connectionManager.GetConnectionAsync(activeEnvironment.Id)
 };
@@ -131,7 +129,7 @@ var statusBar = new StatusBar(
     }),
     new Shortcut(Key.F5, "Refresh Connection", async () =>
     {
-        var env = authService.GetActiveEnvironment();
+        var env = credentialManager.GetActiveEnvironment();
         if (env != null)
         {
             appState.ServiceClient = await connectionManager.GetConnectionAsync(env.Id);
@@ -142,9 +140,9 @@ var statusBar = new StatusBar(
             MessageBox.ErrorQuery(app, "No Active Environment", "There is no active environment. Please set an active environment using the CLI.", "Close");
         }
     }),
-    new Shortcut(Key.F5.WithShift, $"Env: {authService.GetActiveEnvironment()?.Name ?? "None"}", () =>
+    new Shortcut(Key.F5.WithShift, $"Env: {credentialManager.GetActiveEnvironment()?.Name ?? "None"}", () =>
     {
-        var env = authService.GetActiveEnvironment();
+        var env = credentialManager.GetActiveEnvironment();
         if (env != null)
         {
             MessageBox.Query(app, "Current Environment", $"Name: {env.Name}\nURL: {env.OrgUrl}", "Close");
@@ -165,7 +163,7 @@ try
 finally
 {
     await connectionManager.DisposeAsync();
-    await authService.DisposeAsync();
+    await credentialManager.DisposeAsync();
 }
 
 return 0;

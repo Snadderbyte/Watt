@@ -2,339 +2,160 @@
 
 ## Overview
 
-The authentication system in Watt provides secure, multi-method authentication to Dataverse environments. Users can authenticate using OAuth (interactive), Client Secret (service principal), or Username/Password credentials.
+Watt uses Azure CLI based authentication for Dataverse access.
 
-## Features
+The app stores only environment metadata:
+- Environment id
+- Environment name
+- Dataverse org URL
+- Active environment flag
 
-- **Multiple Authentication Methods**
-  - OAuth: Interactive login for personal and work accounts
-  - Client Secret: Service principal authentication (non-interactive)
-  - Username/Password: Direct credential authentication
+Watt does not store credentials, client secrets, passwords, refresh tokens, or access tokens.
 
-- **Secure Credential Storage**
-  - Encrypted storage using Windows DPAPI
-  - Per-user encryption (credentials not transferable between user accounts)
-  - Automatic token expiration tracking
+Authentication tokens are requested on demand through Azure.Identity AzureCliCredential when a Dataverse connection is created.
 
-- **Multiple Environment Support**
-  - Store credentials for multiple Dataverse organizations
-  - Switch between environments without re-authenticating
-  - Credential validation with automatic refresh
+## Current Architecture
 
-- **Connection Management**
-  - Cached Dataverse connections
-  - Automatic connection pooling
-  - On-demand connection establishment
+### Component: EnvironmentDetails
 
-## Architecture
+EnvironmentDetails is the persisted model for each Dataverse environment.
 
-### Core Components
+Fields:
+- Id
+- Name
+- IsActive
+- OrgUrl
 
-#### `AuthenticationMethod` Enum
-Defines supported authentication types:
-- `OAuth`: Interactive login
-- `ClientSecret`: Service principal
-- `UsernamePassword`: Username/Password
+Source: Watt/Core/Authentication/Models/EnvironmentDetails.cs
 
-#### `EnvironmentDetails`
-Represents a Dataverse environment configuration:
-```csharp
-public class EnvironmentDetails
-{
-    public string Id { get; set; }              // Unique ID
-    public string Name { get; set; }            // User-friendly name
-    public string OrgUrl { get; set; }          // https://org.crm.dynamics.com
-    public AuthenticationMethod AuthMethod { get; set; }
-    public DateTime? LastAuthenticatedAt { get; set; }
-    public bool IsAuthenticated { get; set; }
-}
-```
+### Component: CredentialManager
 
-#### `Credentials` Base Class
-Abstract base for credential types:
-- `OAuthCredentials`: OAuth tokens
-- `ClientSecretCredentials`: Service principal credentials
-- `UsernamePasswordCredentials`: Direct credentials
+CredentialManager manages environment metadata lifecycle and persistence.
 
-#### `IAuthenticationProvider`
-Interface for authentication implementations:
-```csharp
-public interface IAuthenticationProvider
-{
-    AuthenticationMethod Method { get; }
-    Task<AuthenticationResult> AuthenticateAsync(EnvironmentDetails environment);
-    Task<bool> ValidateAsync(Credentials credentials, EnvironmentDetails environment);
-}
-```
+Responsibilities:
+- Load environments from disk at startup
+- Save new environment entries
+- Mark one environment as active
+- Remove environments
+- Expose all environments for CLI listing and selection
 
-#### `AuthenticationService`
-Orchestrates authentication across providers:
-- Manages multiple environments
-- Handles credential storage
-- Validates and refreshes credentials
+Persistence:
+- File name: watt_environments.json
+- Folder: AppData/Watt for current user
 
-```csharp
-var authService = new AuthenticationService();
-await authService.InitializeAsync();
+Source: Watt/Core/Authentication/CredentialManager.cs
 
-// Register environment
-var environment = new EnvironmentDetails
-{
-    Id = Guid.NewGuid().ToString(),
-    Name = "Production",
-    OrgUrl = "https://myorg.crm.dynamics.com",
-    AuthMethod = AuthenticationMethod.OAuth
-};
-await authService.RegisterEnvironmentAsync(environment);
+### Component: DataverseConnectionManager
 
-// Authenticate
-var result = await authService.AuthenticateWithOAuthAsync(environment);
-if (result.IsSuccessful)
-{
-    // Authenticated successfully
-}
-```
+DataverseConnectionManager creates ServiceClient instances for environments.
 
-#### `DataverseConnectionManager`
-Manages ServiceClient connections:
-- Caches connections
-- Creates connections on-demand
-- Validates connection status
+Responsibilities:
+- Resolve environment metadata by id
+- Build Dataverse scope as orgUrl/.default
+- Request token via AzureCliCredential
+- Construct ServiceClient using token callback
+- Cache active ServiceClient instances in memory
+- Dispose one or all connections
 
-```csharp
-var connectionMgr = new DataverseConnectionManager(authService);
+Source: Watt/Core/Authentication/DataverseConnectionManager.cs
 
-// Get connection
-var connection = await connectionMgr.GetConnectionAsync(environmentId);
-if (connection?.IsReady == true)
-{
-    // Use connection for Dataverse operations
-}
-```
+### Component: Program startup wiring
 
-#### `CredentialManager`
-Handles secure credential storage:
-- Encrypts credentials using cross-platform AES encryption
-- Key derived from machine and user identifiers (similar to DPAPI but works on Windows, macOS, and Linux)
-- Persists to user's AppData folder
-- Loads credentials on startup
+Program composes the authentication flow.
 
-Stored in: `%APPDATA%\Watt\` (Windows), `~/.config/Watt/` (Linux), or `~/Library/Application Support/Watt/` (macOS)
-- `watt_credentials.json` (encrypted with AES)
-- `watt_environments.json` (plain JSON)
+CLI mode:
+- Load environment metadata
+- Execute env commands
+- Dispose manager
 
-### UI Components
+TUI mode:
+- Load environment metadata
+- Require one active environment
+- Create DataverseConnectionManager
+- Create initial ServiceClient for active environment
+- Store connection objects in AppState
 
-#### `EnvironmentSelectorDialog`
-Terminal.Gui dialog for selecting/managing environments:
-- View all registered environments
-- Add new environments
-- Delete environments
-- Connect to selected environment
-- Shows authentication status (✓/✗)
+Source: Watt/Program.cs
 
-#### `AddEnvironmentDialog`
-Terminal.Gui dialog for registering new environment:
-- Enter environment name
-- Enter organization URL
-- Select authentication method
-- Proceeds to authentication
+### Component: AppState integration
 
-#### `AuthenticationDialog`
-Terminal.Gui dialog for authenticating:
-- Dynamic UI based on authentication method
-- OAuth: Click button for interactive login
-- Client Secret: Textfields for tenant ID, client ID, secret
-- Username/Password: Textfields for credentials
-- Status updates during authentication
+AppState exposes:
+- ServiceClient
+- DataverseConnectionManager
+- SelectedTool
 
-## Usage
+Source: Watt/Core/AppState.cs
 
-### Basic Setup
+## CLI Environment Management
 
-1. **Initialize Services in Application Startup**
+The CLI uses env subcommands to manage environment metadata:
 
-```csharp
-var authService = new AuthenticationService();
-await authService.InitializeAsync();
+- env add <name> <url>
+- env list
+- env select <name|id>
+- env remove <name|id>
 
-var connectionManager = new DataverseConnectionManager(authService);
+Source: Watt/CLI/CliHandler.cs
 
-var appState = new AppState
-{
-    AuthenticationService = authService,
-    ConnectionManager = connectionManager
-};
-```
+Note: Current implementation uses select, not set.
 
-2. **User Adds Environment**
+## Runtime Flow
 
-Users click "Select Environment" → "Add" in the UI, then:
-- Enter environment name
-- Enter organization URL
-- Select authentication method
-- Complete authentication flow
+1. User runs env add to register one or more Dataverse org URLs.
+2. User runs env select to mark one environment active.
+3. User launches TUI without arguments.
+4. Program resolves active environment and opens initial ServiceClient.
+5. Tools consume the shared ServiceClient through AppState.
+6. User can refresh connection from the status shortcut.
 
-3. **User Connects to Environment**
+## Security Model
 
-```csharp
-bool connected = await appState.SwitchEnvironmentAsync(environmentId);
-if (connected && appState.Connection?.IsReady == true)
-{
-    // Ready to use Dataverse
-}
-```
+1. No stored secrets
+- Watt stores only non-secret environment metadata.
 
-### OAuth Authentication
+2. Token acquisition from Azure CLI
+- Tokens come from AzureCliCredential and are fetched when needed.
 
-```csharp
-var environment = new EnvironmentDetails
-{
-    Id = Guid.NewGuid().ToString(),
-    Name = "Dev Environment",
-    OrgUrl = "https://dev.crm.dynamics.com",
-    AuthMethod = AuthenticationMethod.OAuth
-};
+3. In-memory connection cache
+- ServiceClient instances are in memory only and disposed on shutdown.
 
-var result = await authService.AuthenticateWithOAuthAsync(environment);
-```
+4. HTTPS Dataverse endpoints
+- Org URL must be HTTPS in CLI add path.
 
-**Note:** Update the `ClientId` in `OAuthAuthenticationProvider.cs` with your registered Azure AD application ID.
+## Prerequisites
 
-### Client Secret Authentication
-
-```csharp
-var environment = new EnvironmentDetails
-{
-    Id = Guid.NewGuid().ToString(),
-    Name = "Service Account",
-    OrgUrl = "https://org.crm.dynamics.com",
-    AuthMethod = AuthenticationMethod.ClientSecret
-};
-
-var credentials = new ClientSecretCredentials
-{
-    EnvironmentId = environment.Id,
-    TenantId = "your-tenant-id",
-    ClientId = "your-client-id",
-    ClientSecret = "your-client-secret"
-};
-
-var result = await authService.AuthenticateWithClientSecretAsync(environment, credentials);
-```
-
-### Username/Password Authentication
-
-```csharp
-var environment = new EnvironmentDetails
-{
-    Id = Guid.NewGuid().ToString(),
-    Name = "Cloud Environment",
-    OrgUrl = "https://cloud.crm.dynamics.com",
-    AuthMethod = AuthenticationMethod.UsernamePassword
-};
-
-var credentials = new UsernamePasswordCredentials
-{
-    EnvironmentId = environment.Id,
-    Username = "user@org.com",
-    Password = "SecurePassword123"
-};
-
-var result = await authService.AuthenticateWithUsernamePasswordAsync(environment, credentials);
-```
-
-### Using Dataverse Connection
-
-```csharp
-// In a tool view
-var connection = appState.Connection;
-if (connection?.IsReady == true)
-{
-    // Query Dataverse
-    var query = new QueryExpression("account");
-    var result = connection.RetrieveMultiple(query);
-}
-```
-
-## Security Considerations
-
-1. **Cross-Platform AES Encryption**
-   - Credentials are encrypted using AES-256 encryption
-   - Encryption key is derived from machine and user identifiers using PBKDF2
-   - This provides per-user, per-machine encryption similar to Windows DPAPI
-   - Works on Windows, macOS, and Linux
-   - Credentials are not transferable between machines or users
-
-2. **Token Expiration**
-   - OAuth tokens are validated before use
-   - Expired tokens trigger re-authentication automatically
-   - Refresh tokens are stored for obtaining new access tokens
-
-3. **Secrets Storage**
-   - Client secrets and passwords are encrypted before storage
-   - Never logged or displayed in UI
-   - TextField with `Secret = true` for password fields
-
-4. **Connection Security**
-   - All connections use HTTPS
-   - TLS certificate validation enabled
-   - Connections cached in memory only (not persisted)
-
-## Configuration
-
-### Azure AD Application (for OAuth)
-
-1. Register app in Azure AD
-2. Add Dataverse permissions
-3. Set redirect URI to `http://localhost`
-4. Update `ClientId` in `OAuthAuthenticationProvider.cs`
-
-### Service Principal (for Client Secret)
-
-1. Create service principal in Azure AD
-2. Add to Dataverse environment
-3. Grant appropriate security role
-4. Store credentials securely
+1. Azure CLI installed
+2. User authenticated with Azure CLI
+3. Dataverse environment URL in HTTPS form, for example https://org.crm.dynamics.com
+4. Account has Dataverse permissions
 
 ## Troubleshooting
 
-### OAuth Authentication Fails
-- Verify Azure AD app is registered
-- Check organization URL format
-- Ensure account has access to environment
-- Check with: `OAuthAuthenticationProvider.ClientId`
+### No active environment found in TUI
 
-### Client Secret Authentication Fails
-- Verify tenant ID, client ID, and secret
-- Ensure service principal has Dataverse access
-- Check environment URL is correct
-- Verify credentials in portal
+Cause: No environment is marked active.
 
-### Credentials Not Loading
-- Check AppData folder exists (`%APPDATA%\Watt\` on Windows, `~/.config/Watt/` on Linux, or `~/Library/Application Support/Watt/` on macOS)
-- Verify AES encryption not corrupted
-- Re-authenticate if credential files are corrupted
-- Check file permissions on the credentials directory
+Fix: Use env select with an existing environment name or id.
 
-### Connection Fails After Authentication
-- Validate credentials using `ValidateCredentialsAsync`
-- Check organization URL
-- Verify user/service principal has environment access
-- Check network connectivity
+### Connection returns null
 
-### Cross-Platform Issues
-- Encryption keys are derived from machine identifiers and username
-- Credentials will not transfer between machines or user accounts
-- On Linux, ensure `/etc/machine-id` or `/var/lib/dbus/machine-id` is readable
-- On macOS, `ioreg` command is used to get machine UUID
+Common causes:
+- Environment id not found
+- Invalid org URL
+- Azure CLI session not authenticated
+- Dataverse permission issues
 
-## Future Enhancements
+### URL rejected during env add
 
-- Certificate-based authentication
-- Managed identity authentication
-- Connection string import/export
-- Credential rotation automation
-- Multi-factor authentication support
-- Azure Key Vault integration for production deployments
+Cause: URL does not start with https://
+
+### Environment list is empty
+
+Cause: No environments registered yet.
+
+Fix: Use env add first.
+
+## Future Documentation Notes
+
+If you introduce an AuthenticationService abstraction later, document it only after the concrete type exists in source.
 
